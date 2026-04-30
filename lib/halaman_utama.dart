@@ -119,7 +119,7 @@ class HalamanUtama extends StatelessWidget {
                   );
                 },
                 child: const Text(
-                  "MULAI",
+                  "AYO MASAK!",
                   style: TextStyle(
                     fontSize: 28,
                     color: Color(0xFF4F3A38),

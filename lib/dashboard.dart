@@ -1,10 +1,11 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
+import 'package:masakyuk/models/recipe_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:flutter_application_1/models/recipe_model.dart';
-import 'package:flutter_application_1/tambah_resep.dart';
-import 'package:flutter_application_1/login.dart'; // Pastikan import login page ada
+import 'package:masakyuk/tambah_resep.dart';
+import 'package:masakyuk/login.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -78,6 +79,140 @@ class _DashboardState extends State<Dashboard> {
 
   void _backToHome() {
     setState(() => _selectedIndex = 0);
+  }
+
+  // Helper method untuk display gambar yang support web dan mobile
+  ImageProvider getImageProvider(String imagePath) {
+    if (kIsWeb) {
+      // Di web, imagePath adalah blob URL
+      return NetworkImage(imagePath);
+    } else {
+      // Di mobile, imagePath adalah file path
+      return FileImage(File(imagePath));
+    }
+  }
+
+  // Method untuk show detail resep
+  void _showRecipeDetail(Recipe recipe) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.9,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Image
+                if (recipe.imagePath != null)
+                  Container(
+                    width: double.infinity,
+                    height: 250,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(15),
+                      image: DecorationImage(
+                        image: getImageProvider(recipe.imagePath!),
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    width: double.infinity,
+                    height: 250,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(15),
+                      color: Colors.grey[300],
+                    ),
+                    child: const Icon(Icons.image_not_supported, size: 60),
+                  ),
+                const SizedBox(height: 20),
+
+                // Recipe Name
+                Text(
+                  recipe.name,
+                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 20),
+
+                // Ingredients Section
+                const Text(
+                  'Bahan-Bahan:',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    recipe.description,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                // Steps Section
+                const Text(
+                  'Langkah-Langkah:',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(15),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    recipe.steps,
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ),
+                const SizedBox(height: 30),
+
+                // Edit Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => TambahResep(recipe: recipe),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.edit),
+                    label: const Text('Edit Resep'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4F3A38),
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -248,11 +383,16 @@ class _DashboardState extends State<Dashboard> {
         children: [
           Expanded(
             child: GestureDetector(
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => TambahResep(recipe: recipe))),
+              onTap: () => _showRecipeDetail(recipe),
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                  image: recipe.imagePath != null ? DecorationImage(image: FileImage(File(recipe.imagePath!)), fit: BoxFit.cover) : null,
+                  image: recipe.imagePath != null
+                      ? DecorationImage(
+                          image: getImageProvider(recipe.imagePath!),
+                          fit: BoxFit.cover,
+                        )
+                      : null,
                   color: Colors.grey[300],
                 ),
               ),

@@ -45,5 +45,9 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Kami membutuhkan akses ke galeri Anda untuk memilih foto makanan untuk resep Anda.</string>
+	<key>NSPhotoLibraryAddOnlyUsageDescription</key>
+	<string>Kami membutuhkan akses untuk menyimpan foto resep ke galeri Anda.</string>
 </dict>
 </plist>

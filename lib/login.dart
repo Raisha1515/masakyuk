@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'register.dart';
+import 'forgot_password.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dashboard.dart';
 
@@ -21,6 +22,8 @@ class _LoginPageState extends State<LoginPage> {
 
     final savedUser = prefs.getString("username");
     final savedPass = prefs.getString("password");
+
+    if (!mounted) return;
 
     if (usernameController.text == savedUser &&
         passwordController.text == savedPass) {
@@ -168,12 +171,20 @@ class _LoginPageState extends State<LoginPage> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () {},
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ForgotPasswordPage(),
+                          ),
+                        );
+                      },
                       child: const Text(
                         "Forgot Password",
                         style: TextStyle(
                           color: Color(0xFF4F3A38),
                           fontSize: 13,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),

@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart'; 
+import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../models/recipe_model.dart';
 
 class TambahResep extends StatefulWidget {
-  final Recipe? recipe; 
+  final Recipe? recipe;
   const TambahResep({super.key, this.recipe});
 
   @override
@@ -16,7 +18,8 @@ class _TambahResepState extends State<TambahResep> {
   final TextEditingController _descController = TextEditingController();
   final TextEditingController _stepsController = TextEditingController();
 
-  File? _imageFile;
+  XFile? _pickedImage;
+  bool _isPickingImage = false;
   final ImagePicker _picker = ImagePicker();
 
   @override
@@ -30,142 +33,392 @@ class _TambahResepState extends State<TambahResep> {
   }
 
   Future<void> _pickImage() async {
-    final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _imageFile = File(pickedFile.path);
-      });
+    try {
+      // For web platform, skip permission request
+      if (!kIsWeb) {
+        final status = await Permission.photos.request();
+
+        if (!status.isGranted) {
+          _showErrorSnackBar('Izin akses galeri ditolak');
+          return;
+        }
+      }
+
+      setState(() => _isPickingImage = true);
+
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+
+      if (pickedFile != null) {
+        setState(() {
+          _pickedImage = pickedFile;
+        });
+      }
+    } catch (e) {
+      _showErrorSnackBar('Gagal memilih gambar: $e');
+    } finally {
+      setState(() => _isPickingImage = false);
     }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // WARNA BACKROUND UTAMA
-      backgroundColor: const Color(0xFFD9ACA3), 
+      backgroundColor: const Color(0xFFD9ACA3),
       appBar: AppBar(
-        backgroundColor: Colors.transparent, // Transparan agar warna pink muncul
+        backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.close, color: Color(0xFF4F3A38)),
+          icon: const Icon(Icons.close, color: Color(0xFF4F3A38), size: 28),
           onPressed: () => Navigator.pop(context),
         ),
-        title: TextField(
-          controller: _nameController,
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF4F3A38)),
-          decoration: const InputDecoration(
-            hintText: "Nama Resep Makanan ....",
-            hintStyle: TextStyle(color: Color(0xFF8E6F6A)),
-            border: InputBorder.none,
+        title: const Text(
+          'Tambah Resep Baru',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF4F3A38),
           ),
         ),
       ),
-      // Gunakan Container transparan di body untuk memastikan tidak ada warna putih
-      body: Container(
-        color: Colors.transparent, 
-        child: SingleChildScrollView(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 25),
-            child: Column(
-              children: [
-                const Divider(color: Color(0xFF8E6F6A), thickness: 1),
-                const SizedBox(height: 30),
-
-                // Area Unggah Foto
-                GestureDetector(
-                  onTap: _pickImage,
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 130, height: 130,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFFF4081), 
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Upload Image Section
+              Center(
+                child: Column(
+                  children: [
+                    GestureDetector(
+                      onTap: _isPickingImage ? null : _pickImage,
+                      child: Container(
+                        width: 160,
+                        height: 160,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF4081),
                           shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
                         ),
-                        child: _imageFile != null
-                            ? ClipOval(child: Image.file(_imageFile!, fit: BoxFit.cover))
-                            : (widget.recipe?.imagePath != null 
-                                ? ClipOval(child: Image.file(File(widget.recipe!.imagePath!), fit: BoxFit.cover))
-                                : const Icon(Icons.cloud_upload_outlined, size: 70, color: Colors.white)),
+                        child: _isPickingImage
+                            ? const Center(
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Colors.white,
+                                  ),
+                                ),
+                              )
+                            : _pickedImage != null
+                                ? ClipOval(
+                                    child: kIsWeb
+                                        ? Image.network(
+                                            _pickedImage!.path,
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Image.file(
+                                            File(_pickedImage!.path),
+                                            fit: BoxFit.cover,
+                                          ),
+                                  )
+                                : (widget.recipe?.imagePath != null
+                                    ? ClipOval(
+                                        child: Image.file(
+                                          File(widget.recipe!.imagePath!),
+                                          fit: BoxFit.cover,
+                                        ),
+                                      )
+                                    : const Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(Icons.add_a_photo,
+                                              size: 60, color: Colors.white),
+                                          SizedBox(height: 5),
+                                          Text(
+                                            'Tap Upload',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ],
+                                      )),
                       ),
-                      const SizedBox(height: 15),
+                    ),
+                    const SizedBox(height: 15),
+                    const Text(
+                      'Unggah Foto Makananmu',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF4F3A38),
+                        fontSize: 16,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 35),
+
+              // Recipe Name Section
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                color: Colors.white.withOpacity(0.8),
+                child: Padding(
+                  padding: const EdgeInsets.all(15),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       const Text(
-                        "Unggah Foto Makananmu", 
-                        style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4F3A38))
+                        'Nama Resep',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF4F3A38),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _nameController,
+                        style: const TextStyle(
+                          color: Color(0xFF4F3A38),
+                          fontSize: 16,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Masukkan nama resep...',
+                          hintStyle: const TextStyle(
+                            color: Color(0xFFC4AFA5),
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF5EFEB),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 15,
+                            vertical: 12,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.restaurant,
+                            color: Color(0xFFD9ACA3),
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 20),
 
-                const SizedBox(height: 40),
-                const Divider(color: Color(0xFF8E6F6A), thickness: 1),
-                const SizedBox(height: 20),
-
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    "Tambahkan Resep Makanan", 
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF4F3A38))
+              // Ingredients Section
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                color: Colors.white.withOpacity(0.8),
+                child: Padding(
+                  padding: const EdgeInsets.all(15),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Bahan-Bahan',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF4F3A38),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _descController,
+                        maxLines: 5,
+                        style: const TextStyle(
+                          color: Color(0xFF4F3A38),
+                          fontSize: 16,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'Tuliskan semua bahan-bahan yang digunakan...',
+                          hintStyle: const TextStyle(
+                            color: Color(0xFFC4AFA5),
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF5EFEB),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 15,
+                            vertical: 12,
+                          ),
+                          prefixIcon: const Padding(
+                            padding: EdgeInsets.only(top: 12),
+                            child: Icon(
+                              Icons.list_alt,
+                              color: Color(0xFFD9ACA3),
+                            ),
+                          ),
+                          prefixIconConstraints:
+                              const BoxConstraints(minWidth: 50),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+              ),
+              const SizedBox(height: 20),
 
-                // Input Bahan (Tanpa background putih)
-                TextField(
-                  controller: _descController,
-                  maxLines: 4,
-                  style: const TextStyle(color: Color(0xFF4F3A38)),
-                  decoration: const InputDecoration(
-                    hintText: "Tulis bahan-bahan...", 
-                    hintStyle: TextStyle(color: Color(0xFF8E6F6A)),
-                    border: InputBorder.none,
+              // Cooking Steps Section
+              Card(
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                color: Colors.white.withOpacity(0.8),
+                child: Padding(
+                  padding: const EdgeInsets.all(15),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Langkah-Langkah Memasak',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF4F3A38),
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _stepsController,
+                        maxLines: 5,
+                        style: const TextStyle(
+                          color: Color(0xFF4F3A38),
+                          fontSize: 16,
+                        ),
+                        decoration: InputDecoration(
+                          hintText:
+                              'Tuliskan langkah-langkah memasak dengan detail...',
+                          hintStyle: const TextStyle(
+                            color: Color(0xFFC4AFA5),
+                          ),
+                          filled: true,
+                          fillColor: const Color(0xFFF5EFEB),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 15,
+                            vertical: 12,
+                          ),
+                          prefixIcon: const Padding(
+                            padding: EdgeInsets.only(top: 12),
+                            child: Icon(
+                              Icons.format_list_numbered,
+                              color: Color(0xFFD9ACA3),
+                            ),
+                          ),
+                          prefixIconConstraints:
+                              const BoxConstraints(minWidth: 50),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                
-                const Divider(color: Color(0xFF8E6F6A)),
+              ),
+              const SizedBox(height: 35),
 
-                // Input Langkah (Tanpa background putih)
-                TextField(
-                  controller: _stepsController,
-                  maxLines: 4,
-                  style: const TextStyle(color: Color(0xFF4F3A38)),
-                  decoration: const InputDecoration(
-                    hintText: "Tulis langkah memasak...", 
-                    hintStyle: TextStyle(color: Color(0xFF8E6F6A)),
-                    border: InputBorder.none,
-                  ),
-                ),
+              // Submit Button
+              SizedBox(
+                width: double.infinity,
+                height: 60,
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (_nameController.text.isEmpty) {
+                      _showErrorSnackBar('Mohon isi nama resep');
+                      return;
+                    }
+                    if (_descController.text.isEmpty) {
+                      _showErrorSnackBar('Mohon isi bahan-bahan');
+                      return;
+                    }
+                    if (_stepsController.text.isEmpty) {
+                      _showErrorSnackBar('Mohon isi langkah-langkah memasak');
+                      return;
+                    }
 
-                const SizedBox(height: 40),
+                    String? imagePath;
+                    if (_pickedImage != null) {
+                      imagePath = _pickedImage!.path;
+                    } else if (widget.recipe?.imagePath != null) {
+                      imagePath = widget.recipe!.imagePath;
+                    }
 
-                // Tombol Tambahkan
-                SizedBox(
-                  width: double.infinity,
-                  height: 55,
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (_nameController.text.isEmpty) return;
-                      final newRecipe = Recipe(
-                        name: _nameController.text,
-                        imagePath: _imageFile?.path ?? widget.recipe?.imagePath,
-                        description: _descController.text,
-                        steps: _stepsController.text,
-                      );
-                      Navigator.pop(context, newRecipe);
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF8E9DA),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-                      elevation: 0,
+                    final newRecipe = Recipe(
+                      name: _nameController.text,
+                      imagePath: imagePath,
+                      description: _descController.text,
+                      steps: _stepsController.text,
+                    );
+                    Navigator.pop(context, newRecipe);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF8E9DA),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(15),
                     ),
-                    child: const Text(
-                      "Tambahkan", 
-                      style: TextStyle(color: Color(0xFF4F3A38), fontSize: 18, fontWeight: FontWeight.bold)
-                    ),
+                    elevation: 2,
+                    shadowColor: Colors.black.withOpacity(0.3),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.add_circle_outline,
+                        color: Color(0xFF4F3A38),
+                        size: 24,
+                      ),
+                      SizedBox(width: 10),
+                      Text(
+                        'Tambahkan Resep',
+                        style: TextStyle(
+                          color: Color(0xFF4F3A38),
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 30),
-              ],
-            ),
+              ),
+              const SizedBox(height: 30),
+            ],
           ),
         ),
       ),

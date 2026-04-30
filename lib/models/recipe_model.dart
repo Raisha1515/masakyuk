@@ -1,8 +1,8 @@
 class Recipe {
   final String name;
-  final String? imagePath; // Pastikan namanya imagePath (p kecil, P besar)
+  final String? imagePath;
   final String description;
-  final String steps; // Tambahkan ini agar error di baris 59 hilang
+  final String steps;
 
   Recipe({
     required this.name,
