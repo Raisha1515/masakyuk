@@ -27,6 +27,12 @@ class _AddPageState extends State<AddPage> {
     }
   }
 
+  String _generateRecipeId() {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final random = (DateTime.now().microsecond % 10000).toString().padLeft(4, '0');
+    return 'recipe_${timestamp}_$random';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -127,11 +133,15 @@ class _AddPageState extends State<AddPage> {
                   onPressed: () {
                     if (_nameController.text.isEmpty) return;
 
+                    final recipeId = _generateRecipeId();
                     final newRecipe = Recipe(
+                      id: recipeId,
                       name: _nameController.text,
-                      imagePath: _imageFile?.path, // Ambil path-nya saja (String)
+                      imagePath: _imageFile?.path,
                       description: _descController.text,
-                      steps: "-", // Berikan nilai default agar tidak error
+                      steps: "-",
+                      category: "Umum",
+                      isPublic: true,
                     );
 
                     Navigator.pop(context, newRecipe);

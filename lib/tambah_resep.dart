@@ -40,9 +40,8 @@ class _TambahResepState extends State<TambahResep> {
       _nameController.text = widget.recipe!.name;
       _descController.text = widget.recipe!.description;
       _stepsController.text = widget.recipe!.steps;
-      // Inisialisasi jika model Recipe kamu sudah punya field kategori/status
-      // _selectedCategory = widget.recipe!.category;
-      // _isPublic = widget.recipe!.isPublic;
+      _selectedCategory = widget.recipe!.category;
+      _isPublic = widget.recipe!.isPublic;
     }
   }
 
@@ -335,15 +334,25 @@ class _TambahResepState extends State<TambahResep> {
 
     String? imagePath = _pickedImage?.path ?? widget.recipe?.imagePath;
 
+    String recipeId = widget.recipe?.id ?? _generateRecipeId();
+
     final newRecipe = Recipe(
+      id: recipeId,
       name: _nameController.text,
       imagePath: imagePath,
       description: _descController.text,
       steps: _stepsController.text,
-      // Jangan lupa tambahkan field ini di model Recipe kamu:
-      // category: _selectedCategory,
-      // isPublic: _isPublic,
+      category: _selectedCategory!,
+      isPublic: _isPublic,
+      comments: widget.recipe?.comments ?? [],
+      ratings: widget.recipe?.ratings ?? [],
     );
     Navigator.pop(context, newRecipe);
+  }
+
+  String _generateRecipeId() {
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final random = (DateTime.now().microsecond % 10000).toString().padLeft(4, '0');
+    return 'recipe_${timestamp}_$random';
   }
 }
