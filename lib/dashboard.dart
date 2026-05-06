@@ -6,6 +6,7 @@ import 'package:masakyuk/models/recipe_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:masakyuk/tambah_resep.dart';
 import 'package:masakyuk/login.dart';
+import 'package:masakyuk/recipe_detail_page.dart';
 
 class Dashboard extends StatefulWidget {
   const Dashboard({super.key});
@@ -75,49 +76,6 @@ class _DashboardState extends State<Dashboard> {
     setState(() => _selectedIndex = 0);
   }
 
-  void _addRating(Recipe recipe, int stars) {
-    final ratingId = 'rating_${DateTime.now().millisecondsSinceEpoch}';
-    final newRating = Rating(
-      id: ratingId,
-      stars: stars,
-      timestamp: DateTime.now(),
-    );
-    recipe.ratings.add(newRating);
-    _saveAllData();
-    setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rating berhasil ditambahkan!')));
-  }
-
-  void _addComment(Recipe recipe, String text) {
-    final commentId = 'comment_${DateTime.now().millisecondsSinceEpoch}';
-    final newComment = Comment(
-      id: commentId,
-      author: userName,
-      text: text,
-      timestamp: DateTime.now(),
-    );
-    recipe.comments.add(newComment);
-    _saveAllData();
-    setState(() {});
-  }
-
-  String _formatTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
-
-    if (difference.inSeconds < 60) {
-      return 'Baru saja';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m lalu';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h lalu';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d lalu';
-    } else {
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
-    }
-  }
-
   // Helper method untuk display gambar yang support web dan mobile
   ImageProvider getImageProvider(String imagePath) {
     if (kIsWeb) {
@@ -129,313 +87,332 @@ class _DashboardState extends State<Dashboard> {
     }
   }
 
+  // void _showRecipeDetail(Recipe recipe) {
+  //   final TextEditingController commentController = TextEditingController();
+  //   int selectedRating = 0;
+
+  //   showModalBottomSheet(
+  //     context: context,
+  //     isScrollControlled: true,
+  //     shape: const RoundedRectangleBorder(
+  //       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+  //     ),
+  //     builder: (context) => StatefulBuilder(
+  //       builder: (context, setModalState) => DraggableScrollableSheet(
+  //         initialChildSize: 0.9,
+  //         minChildSize: 0.5,
+  //         maxChildSize: 0.95,
+  //         expand: false,
+  //         builder: (context, scrollController) => SingleChildScrollView(
+  //           controller: scrollController,
+  //           child: Padding(
+  //             padding: const EdgeInsets.all(20),
+  //             child: Column(
+  //               crossAxisAlignment: CrossAxisAlignment.start,
+  //               children: [
+  //                 if (recipe.imagePath != null)
+  //                   Container(
+  //                     width: double.infinity,
+  //                     height: 250,
+  //                     decoration: BoxDecoration(
+  //                       borderRadius: BorderRadius.circular(15),
+  //                       image: DecorationImage(
+  //                         image: getImageProvider(recipe.imagePath!),
+  //                         fit: BoxFit.cover,
+  //                       ),
+  //                     ),
+  //                   )
+  //                 else
+  //                   Container(
+  //                     width: double.infinity,
+  //                     height: 250,
+  //                     decoration: BoxDecoration(
+  //                       borderRadius: BorderRadius.circular(15),
+  //                       color: Colors.grey[300],
+  //                     ),
+  //                     child: const Icon(Icons.image_not_supported, size: 60),
+  //                   ),
+  //                 const SizedBox(height: 20),
+
+  //                 Row(
+  //                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  //                   children: [
+  //                     Expanded(
+  //                       child: Column(
+  //                         crossAxisAlignment: CrossAxisAlignment.start,
+  //                         children: [
+  //                           Text(
+  //                             recipe.name,
+  //                             style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+  //                           ),
+  //                           const SizedBox(height: 5),
+  //                           if (recipe.category.isNotEmpty)
+  //                             Container(
+  //                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+  //                               decoration: BoxDecoration(
+  //                                 color: const Color(0xFFFF4081).withOpacity(0.2),
+  //                                 borderRadius: BorderRadius.circular(12),
+  //                               ),
+  //                               child: Text(
+  //                                 recipe.category,
+  //                                 style: const TextStyle(fontSize: 12, color: Color(0xFFFF4081), fontWeight: FontWeight.bold),
+  //                               ),
+  //                             ),
+  //                         ],
+  //                       ),
+  //                     ),
+  //                   ],
+  //                 ),
+  //                 const SizedBox(height: 20),
+
+  //                 const Text(
+  //                   'Bahan-Bahan:',
+  //                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+  //                 ),
+  //                 const SizedBox(height: 10),
+  //                 Container(
+  //                   width: double.infinity,
+  //                   padding: const EdgeInsets.all(15),
+  //                   decoration: BoxDecoration(
+  //                     color: Colors.grey[200],
+  //                     borderRadius: BorderRadius.circular(10),
+  //                   ),
+  //                   child: Text(
+  //                     recipe.description,
+  //                     style: const TextStyle(fontSize: 14),
+  //                   ),
+  //                 ),
+  //                 const SizedBox(height: 20),
+
+  //                 const Text(
+  //                   'Langkah-Langkah:',
+  //                   style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+  //                 ),
+  //                 const SizedBox(height: 10),
+  //                 Container(
+  //                   width: double.infinity,
+  //                   padding: const EdgeInsets.all(15),
+  //                   decoration: BoxDecoration(
+  //                     color: Colors.grey[200],
+  //                     borderRadius: BorderRadius.circular(10),
+  //                   ),
+  //                   child: Text(
+  //                     recipe.steps,
+  //                     style: const TextStyle(fontSize: 14),
+  //                   ),
+  //                 ),
+  //                 const SizedBox(height: 30),
+
+  //                 if (recipe.isPublic) ...[
+  //                   const Text(
+  //                     'Rating & Ulasan:',
+  //                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+  //                   ),
+  //                   const SizedBox(height: 10),
+
+  //                   if (recipe.ratings.isNotEmpty)
+  //                     Container(
+  //                       width: double.infinity,
+  //                       padding: const EdgeInsets.all(15),
+  //                       decoration: BoxDecoration(
+  //                         color: Colors.amber.withOpacity(0.1),
+  //                         borderRadius: BorderRadius.circular(10),
+  //                       ),
+  //                       child: Column(
+  //                         crossAxisAlignment: CrossAxisAlignment.start,
+  //                         children: [
+  //                           Row(
+  //                             children: [
+  //                               Text(
+  //                                 '⭐ ${recipe.averageRating.toStringAsFixed(1)}',
+  //                                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+  //                               ),
+  //                               const SizedBox(width: 10),
+  //                               Text(
+  //                                 '(${recipe.ratings.length} rating)',
+  //                                 style: const TextStyle(fontSize: 12, color: Colors.grey),
+  //                               ),
+  //                             ],
+  //                           ),
+  //                         ],
+  //                       ),
+  //                     )
+  //                   else
+  //                     Container(
+  //                       width: double.infinity,
+  //                       padding: const EdgeInsets.all(15),
+  //                       decoration: BoxDecoration(
+  //                         color: Colors.grey[200],
+  //                         borderRadius: BorderRadius.circular(10),
+  //                       ),
+  //                       child: const Text('Belum ada rating'),
+  //                     ),
+
+  //                   const SizedBox(height: 15),
+  //                   const Text('Berikan Rating Anda:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+  //                   const SizedBox(height: 10),
+  //                   Row(
+  //                     children: List.generate(5, (index) {
+  //                       return GestureDetector(
+  //                         onTap: () => setModalState(() => selectedRating = index + 1),
+  //                         child: Padding(
+  //                           padding: const EdgeInsets.symmetric(horizontal: 4),
+  //                           child: Text(
+  //                             selectedRating > index ? '⭐' : '☆',
+  //                             style: const TextStyle(fontSize: 28),
+  //                           ),
+  //                         ),
+  //                       );
+  //                     }),
+  //                   ),
+  //                   if (selectedRating > 0)
+  //                     Padding(
+  //                       padding: const EdgeInsets.only(top: 10),
+  //                       child: SizedBox(
+  //                         width: double.infinity,
+  //                         child: ElevatedButton(
+  //                           onPressed: () {
+  //                             _addRating(recipe, selectedRating);
+  //                             setModalState(() => selectedRating = 0);
+  //                           },
+  //                           style: ElevatedButton.styleFrom(
+  //                             backgroundColor: const Color(0xFFFF4081),
+  //                           ),
+  //                           child: const Text('Kirim Rating', style: TextStyle(color: Colors.white)),
+  //                         ),
+  //                       ),
+  //                     ),
+
+  //                   const SizedBox(height: 25),
+  //                   const Text(
+  //                     'Komentar:',
+  //                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+  //                   ),
+  //                   const SizedBox(height: 10),
+
+  //                   if (recipe.comments.isNotEmpty)
+  //                     Container(
+  //                       width: double.infinity,
+  //                       padding: const EdgeInsets.all(15),
+  //                       decoration: BoxDecoration(
+  //                         color: Colors.grey[100],
+  //                         borderRadius: BorderRadius.circular(10),
+  //                       ),
+  //                       child: Column(
+  //                         crossAxisAlignment: CrossAxisAlignment.start,
+  //                         children: recipe.comments.map((comment) {
+  //                           return Padding(
+  //                             padding: const EdgeInsets.only(bottom: 12),
+  //                             child: Column(
+  //                               crossAxisAlignment: CrossAxisAlignment.start,
+  //                               children: [
+  //                                 Row(
+  //                                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  //                                   children: [
+  //                                     Text(
+  //                                       comment.author,
+  //                                       style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+  //                                     ),
+  //                                     Text(
+  //                                       _formatTime(comment.timestamp),
+  //                                       style: const TextStyle(fontSize: 11, color: Colors.grey),
+  //                                     ),
+  //                                   ],
+  //                                 ),
+  //                                 const SizedBox(height: 4),
+  //                                 Text(comment.text, style: const TextStyle(fontSize: 12)),
+  //                               ],
+  //                             ),
+  //                           );
+  //                         }).toList(),
+  //                       ),
+  //                     )
+  //                   else
+  //                     Container(
+  //                       width: double.infinity,
+  //                       padding: const EdgeInsets.all(15),
+  //                       decoration: BoxDecoration(
+  //                         color: Colors.grey[200],
+  //                         borderRadius: BorderRadius.circular(10),
+  //                       ),
+  //                       child: const Text('Belum ada komentar'),
+  //                     ),
+
+  //                   const SizedBox(height: 15),
+  //                   TextField(
+  //                     controller: commentController,
+  //                     maxLines: 2,
+  //                     decoration: InputDecoration(
+  //                       hintText: 'Tambahkan komentar...',
+  //                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+  //                       contentPadding: const EdgeInsets.all(12),
+  //                     ),
+  //                   ),
+  //                   const SizedBox(height: 10),
+  //                   SizedBox(
+  //                     width: double.infinity,
+  //                     child: ElevatedButton(
+  //                       onPressed: () {
+  //                         if (commentController.text.isNotEmpty) {
+  //                           _addComment(recipe, commentController.text);
+  //                           commentController.clear();
+  //                           setModalState(() {});
+  //                         }
+  //                       },
+  //                       style: ElevatedButton.styleFrom(
+  //                         backgroundColor: const Color(0xFFFF4081),
+  //                       ),
+  //                       child: const Text('Kirim Komentar', style: TextStyle(color: Colors.white)),
+  //                     ),
+  //                   ),
+  //                 ],
+
+  //                 const SizedBox(height: 30),
+  //                 SizedBox(
+  //                   width: double.infinity,
+  //                   height: 50,
+  //                   child: ElevatedButton.icon(
+  //                     onPressed: () {
+  //                       Navigator.pop(context);
+  //                       Navigator.push(
+  //                         context,
+  //                         MaterialPageRoute(
+  //                           builder: (context) => TambahResep(recipe: recipe),
+  //                         ),
+  //                       );
+  //                     },
+  //                     icon: const Icon(Icons.edit),
+  //                     label: const Text('Edit Resep'),
+  //                     style: ElevatedButton.styleFrom(
+  //                       backgroundColor: const Color(0xFF4F3A38),
+  //                       foregroundColor: Colors.white,
+  //                     ),
+  //                   ),
+  //                 ),
+  //                 const SizedBox(height: 10),
+  //               ],
+  //             ),
+  //           ),
+  //         ),
+  //       ),
+  //     ),
+  //   );
+  // }
   void _showRecipeDetail(Recipe recipe) {
-    final TextEditingController commentController = TextEditingController();
-    int selectedRating = 0;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => DraggableScrollableSheet(
-          initialChildSize: 0.9,
-          minChildSize: 0.5,
-          maxChildSize: 0.95,
-          expand: false,
-          builder: (context, scrollController) => SingleChildScrollView(
-            controller: scrollController,
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (recipe.imagePath != null)
-                    Container(
-                      width: double.infinity,
-                      height: 250,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(15),
-                        image: DecorationImage(
-                          image: getImageProvider(recipe.imagePath!),
-                          fit: BoxFit.cover,
-                        ),
-                      ),
-                    )
-                  else
-                    Container(
-                      width: double.infinity,
-                      height: 250,
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(15),
-                        color: Colors.grey[300],
-                      ),
-                      child: const Icon(Icons.image_not_supported, size: 60),
-                    ),
-                  const SizedBox(height: 20),
-
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              recipe.name,
-                              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 5),
-                            if (recipe.category.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFF4081).withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  recipe.category,
-                                  style: const TextStyle(fontSize: 12, color: Color(0xFFFF4081), fontWeight: FontWeight.bold),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  const Text(
-                    'Bahan-Bahan:',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(15),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      recipe.description,
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-
-                  const Text(
-                    'Langkah-Langkah:',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(15),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      recipe.steps,
-                      style: const TextStyle(fontSize: 14),
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-
-                  if (recipe.isPublic) ...[
-                    const Text(
-                      'Rating & Ulasan:',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 10),
-
-                    if (recipe.ratings.isNotEmpty)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(15),
-                        decoration: BoxDecoration(
-                          color: Colors.amber.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text(
-                                  '⭐ ${recipe.averageRating.toStringAsFixed(1)}',
-                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  '(${recipe.ratings.length} rating)',
-                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      )
-                    else
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(15),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Text('Belum ada rating'),
-                      ),
-
-                    const SizedBox(height: 15),
-                    const Text('Berikan Rating Anda:', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 10),
-                    Row(
-                      children: List.generate(5, (index) {
-                        return GestureDetector(
-                          onTap: () => setModalState(() => selectedRating = index + 1),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: Text(
-                              selectedRating > index ? '⭐' : '☆',
-                              style: const TextStyle(fontSize: 28),
-                            ),
-                          ),
-                        );
-                      }),
-                    ),
-                    if (selectedRating > 0)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 10),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              _addRating(recipe, selectedRating);
-                              setModalState(() => selectedRating = 0);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFF4081),
-                            ),
-                            child: const Text('Kirim Rating', style: TextStyle(color: Colors.white)),
-                          ),
-                        ),
-                      ),
-
-                    const SizedBox(height: 25),
-                    const Text(
-                      'Komentar:',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 10),
-
-                    if (recipe.comments.isNotEmpty)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(15),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[100],
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: recipe.comments.map((comment) {
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 12),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        comment.author,
-                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                                      ),
-                                      Text(
-                                        _formatTime(comment.timestamp),
-                                        style: const TextStyle(fontSize: 11, color: Colors.grey),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(comment.text, style: const TextStyle(fontSize: 12)),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      )
-                    else
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(15),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Text('Belum ada komentar'),
-                      ),
-
-                    const SizedBox(height: 15),
-                    TextField(
-                      controller: commentController,
-                      maxLines: 2,
-                      decoration: InputDecoration(
-                        hintText: 'Tambahkan komentar...',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                        contentPadding: const EdgeInsets.all(12),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          if (commentController.text.isNotEmpty) {
-                            _addComment(recipe, commentController.text);
-                            commentController.clear();
-                            setModalState(() {});
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFFFF4081),
-                        ),
-                        child: const Text('Kirim Komentar', style: TextStyle(color: Colors.white)),
-                      ),
-                    ),
-                  ],
-
-                  const SizedBox(height: 30),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => TambahResep(recipe: recipe),
-                          ),
-                        );
-                      },
-                      icon: const Icon(Icons.edit),
-                      label: const Text('Edit Resep'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4F3A38),
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-              ),
-            ),
-          ),
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RecipeDetailPage(
+          recipe: recipe,
+          onRecipeUpdated: (updatedRecipe) {
+            setState(() {
+              int index = recipeList.indexWhere((r) => r.id == updatedRecipe.id);
+              if (index != -1) {
+                recipeList[index] = updatedRecipe;
+              }
+            });
+            _saveAllData();
+          },
         ),
       ),
     );
@@ -602,17 +579,17 @@ class _DashboardState extends State<Dashboard> {
   // --- CARD RESEP ---
   Widget resepCard(Recipe recipe, int index) {
     bool isFavorited = favoritedIndices.contains(index);
-    return Container(
-      decoration: BoxDecoration(color: const Color(0xFFFCEEE4), borderRadius: BorderRadius.circular(20)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Stack(
-              children: [
-                GestureDetector(
-                  onTap: () => _showRecipeDetail(recipe),
-                  child: Container(
+    return GestureDetector(
+      onTap: () => _showRecipeDetail(recipe),
+      child: Container(
+        decoration: BoxDecoration(color: const Color(0xFFFCEEE4), borderRadius: BorderRadius.circular(20)),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Stack(
+                children: [
+                  Container(
                     decoration: BoxDecoration(
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
                       image: recipe.imagePath != null
@@ -624,80 +601,107 @@ class _DashboardState extends State<Dashboard> {
                       color: Colors.grey[300],
                     ),
                   ),
-                ),
-                if (recipe.isPublic && recipe.category.isNotEmpty)
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFF4081),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        recipe.category,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                  if (recipe.isPublic && recipe.category.isNotEmpty)
+                    Positioned(
+                      top: 10,
+                      right: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF4081),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          recipe.category,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                if (recipe.isPublic && recipe.ratings.isNotEmpty)
-                  Positioned(
-                    bottom: 10,
-                    left: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.withOpacity(0.9),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        children: [
-                          const Text('⭐', style: TextStyle(fontSize: 12)),
-                          const SizedBox(width: 3),
-                          Text(
-                            recipe.averageRating.toStringAsFixed(1),
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                  if (recipe.isPublic && recipe.ratings.isNotEmpty)
+                    Positioned(
+                      bottom: 10,
+                      left: 10,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            const Text('⭐', style: TextStyle(fontSize: 12)),
+                            const SizedBox(width: 3),
+                            Text(
+                              recipe.averageRating.toStringAsFixed(1),
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          recipe.name,
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            if (isFavorited) {
+                              favoritedIndices.remove(index);
+                            } else {
+                              favoritedIndices.add(index);
+                              notificationList.add("Resep ${recipe.name} berhasil ditambahkan ke favorit!");
+                            }
+                          });
+                          _saveAllData();
+                        },
+                        child: Icon(isFavorited ? Icons.favorite : Icons.favorite_border, color: Colors.pink, size: 20),
+                      )
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 32,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _showRecipeDetail(recipe),
+                      icon: const Icon(Icons.visibility, size: 16),
+                      label: const Text('Lihat Detail', style: TextStyle(fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFF4081),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 0),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
                   ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(child: Text(recipe.name, style: const TextStyle(fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis)),
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      if (isFavorited) {
-                        favoritedIndices.remove(index);
-                      } else {
-                        favoritedIndices.add(index);
-                        notificationList.add("Resep ${recipe.name} berhasil ditambahkan ke favorit!");
-                      }
-                    });
-                    _saveAllData();
-                  },
-                  child: Icon(isFavorited ? Icons.favorite : Icons.favorite_border, color: Colors.pink, size: 22),
-                )
-              ],
-            ),
-          )
-        ],
+                ],
+              ),
+            )
+          ],
+        ),
       ),
     );
   }
