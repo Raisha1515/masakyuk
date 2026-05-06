@@ -6,11 +6,13 @@ import 'package:masakyuk/tambah_resep.dart';
 
 class RecipeDetailPage extends StatefulWidget {
   final Recipe recipe;
+  final String userName; // Tambahkan ini
   final Function(Recipe) onRecipeUpdated;
 
   const RecipeDetailPage({
     super.key,
     required this.recipe,
+    required this.userName,
     required this.onRecipeUpdated,
   });
 
@@ -62,7 +64,7 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> {
     final commentId = 'comment_${DateTime.now().millisecondsSinceEpoch}';
     final newComment = Comment(
       id: commentId,
-      author: 'User',
+      author: widget.userName ?? 'Pengguna',
       text: text,
       timestamp: DateTime.now(),
     );
