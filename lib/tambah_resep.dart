@@ -18,6 +18,17 @@ class _TambahResepState extends State<TambahResep> {
   final TextEditingController _descController = TextEditingController();
   final TextEditingController _stepsController = TextEditingController();
 
+  // --- Fitur Baru: State Kategori & Publikasi ---
+  String? _selectedCategory;
+  bool _isPublic = true; // Default ke Public
+  final List<String> _categories = [
+    'Sarapan',
+    'Makan Siang',
+    'Makan Malam',
+    'Diet',
+    'Dessert'
+  ];
+
   XFile? _pickedImage;
   bool _isPickingImage = false;
   final ImagePicker _picker = ImagePicker();
@@ -29,32 +40,29 @@ class _TambahResepState extends State<TambahResep> {
       _nameController.text = widget.recipe!.name;
       _descController.text = widget.recipe!.description;
       _stepsController.text = widget.recipe!.steps;
+      // Inisialisasi jika model Recipe kamu sudah punya field kategori/status
+      // _selectedCategory = widget.recipe!.category;
+      // _isPublic = widget.recipe!.isPublic;
     }
   }
 
+  // ... (Fungsi _pickImage dan _showErrorSnackBar tetap sama)
   Future<void> _pickImage() async {
     try {
-      // For web platform, skip permission request
       if (!kIsWeb) {
         final status = await Permission.photos.request();
-
         if (!status.isGranted) {
           _showErrorSnackBar('Izin akses galeri ditolak');
           return;
         }
       }
-
       setState(() => _isPickingImage = true);
-
       final XFile? pickedFile = await _picker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 85,
       );
-
       if (pickedFile != null) {
-        setState(() {
-          _pickedImage = pickedFile;
-        });
+        setState(() => _pickedImage = pickedFile);
       }
     } catch (e) {
       _showErrorSnackBar('Gagal memilih gambar: $e');
@@ -87,10 +95,7 @@ class _TambahResepState extends State<TambahResep> {
         title: const Text(
           'Tambah Resep Baru',
           style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Color(0xFF4F3A38),
-          ),
+              fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF4F3A38)),
         ),
       ),
       body: SingleChildScrollView(
@@ -99,7 +104,7 @@ class _TambahResepState extends State<TambahResep> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Upload Image Section
+              // 1. Image Section (Tetap sama)
               Center(
                 child: Column(
                   children: [
@@ -113,39 +118,29 @@ class _TambahResepState extends State<TambahResep> {
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.2),
-                              blurRadius: 8,
-                              offset: const Offset(0, 4),
-                            ),
+                                color: Colors.black.withOpacity(0.2),
+                                blurRadius: 8,
+                                offset: const Offset(0, 4)),
                           ],
                         ),
                         child: _isPickingImage
                             ? const Center(
                                 child: CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    Colors.white,
-                                  ),
-                                ),
-                              )
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white)))
                             : _pickedImage != null
                                 ? ClipOval(
                                     child: kIsWeb
-                                        ? Image.network(
-                                            _pickedImage!.path,
-                                            fit: BoxFit.cover,
-                                          )
-                                        : Image.file(
-                                            File(_pickedImage!.path),
-                                            fit: BoxFit.cover,
-                                          ),
+                                        ? Image.network(_pickedImage!.path,
+                                            fit: BoxFit.cover)
+                                        : Image.file(File(_pickedImage!.path),
+                                            fit: BoxFit.cover),
                                   )
                                 : (widget.recipe?.imagePath != null
                                     ? ClipOval(
                                         child: Image.file(
-                                          File(widget.recipe!.imagePath!),
-                                          fit: BoxFit.cover,
-                                        ),
-                                      )
+                                            File(widget.recipe!.imagePath!),
+                                            fit: BoxFit.cover))
                                     : const Column(
                                         mainAxisAlignment:
                                             MainAxisAlignment.center,
@@ -153,266 +148,132 @@ class _TambahResepState extends State<TambahResep> {
                                           Icon(Icons.add_a_photo,
                                               size: 60, color: Colors.white),
                                           SizedBox(height: 5),
-                                          Text(
-                                            'Tap Upload',
-                                            style: TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
+                                          Text('Tap Upload',
+                                              style: TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 12,
+                                                  fontWeight: FontWeight.w500)),
                                         ],
                                       )),
                       ),
                     ),
                     const SizedBox(height: 15),
-                    const Text(
-                      'Unggah Foto Makananmu',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF4F3A38),
-                        fontSize: 16,
-                      ),
-                    ),
+                    const Text('Unggah Foto Makananmu',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF4F3A38),
+                            fontSize: 16)),
                   ],
                 ),
               ),
               const SizedBox(height: 35),
 
-              // Recipe Name Section
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                color: Colors.white.withOpacity(0.8),
-                child: Padding(
-                  padding: const EdgeInsets.all(15),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Nama Resep',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF4F3A38),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _nameController,
-                        style: const TextStyle(
-                          color: Color(0xFF4F3A38),
-                          fontSize: 16,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Masukkan nama resep...',
-                          hintStyle: const TextStyle(
-                            color: Color(0xFFC4AFA5),
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFFF5EFEB),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 15,
-                            vertical: 12,
-                          ),
-                          prefixIcon: const Icon(
-                            Icons.restaurant,
-                            color: Color(0xFFD9ACA3),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+              // 2. Form Nama Resep (Tetap sama)
+              _buildFormCard(
+                label: 'Nama Resep',
+                child: TextField(
+                  controller: _nameController,
+                  decoration: _buildInputDecoration(
+                      'Masukkan nama resep...', Icons.restaurant),
                 ),
               ),
               const SizedBox(height: 20),
 
-              // Ingredients Section
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                color: Colors.white.withOpacity(0.8),
-                child: Padding(
-                  padding: const EdgeInsets.all(15),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Bahan-Bahan',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF4F3A38),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _descController,
-                        maxLines: 5,
-                        style: const TextStyle(
-                          color: Color(0xFF4F3A38),
-                          fontSize: 16,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: 'Tuliskan semua bahan-bahan yang digunakan...',
-                          hintStyle: const TextStyle(
-                            color: Color(0xFFC4AFA5),
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFFF5EFEB),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 15,
-                            vertical: 12,
-                          ),
-                          prefixIcon: const Padding(
-                            padding: EdgeInsets.only(top: 12),
-                            child: Icon(
-                              Icons.list_alt,
-                              color: Color(0xFFD9ACA3),
-                            ),
-                          ),
-                          prefixIconConstraints:
-                              const BoxConstraints(minWidth: 50),
-                        ),
-                      ),
-                    ],
-                  ),
+              // --- FITUR BARU: DROPDOWN KATEGORI ---
+              _buildFormCard(
+                label: 'Pilih Kategori',
+                child: DropdownButtonFormField<String>(
+                  value: _selectedCategory,
+                  items: _categories.map((String category) {
+                    return DropdownMenuItem(
+                      value: category,
+                      child: Text(category),
+                    );
+                  }).toList(),
+                  onChanged: (value) => setState(() => _selectedCategory = value),
+                  decoration: _buildInputDecoration(
+                      'Pilih kategori hidangan', Icons.category),
+                  dropdownColor: const Color(0xFFF5EFEB),
                 ),
               ),
               const SizedBox(height: 20),
 
-              // Cooking Steps Section
-              Card(
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
+              // --- FITUR BARU: STATUS PUBLIKASI ---
+              _buildFormCard(
+                label: 'Status Publikasi',
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: RadioListTile<bool>(
+                        title: const Text('Public',
+                            style: TextStyle(fontSize: 14)),
+                        value: true,
+                        groupValue: _isPublic,
+                        activeColor: const Color(0xFFFF4081),
+                        onChanged: (val) => setState(() => _isPublic = val!),
+                      ),
+                    ),
+                    Expanded(
+                      child: RadioListTile<bool>(
+                        title: const Text('Private',
+                            style: TextStyle(fontSize: 14)),
+                        value: false,
+                        groupValue: _isPublic,
+                        activeColor: const Color(0xFFFF4081),
+                        onChanged: (val) => setState(() => _isPublic = val!),
+                      ),
+                    ),
+                  ],
                 ),
-                color: Colors.white.withOpacity(0.8),
-                child: Padding(
-                  padding: const EdgeInsets.all(15),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Langkah-Langkah Memasak',
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF4F3A38),
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _stepsController,
-                        maxLines: 5,
-                        style: const TextStyle(
-                          color: Color(0xFF4F3A38),
-                          fontSize: 16,
-                        ),
-                        decoration: InputDecoration(
-                          hintText:
-                              'Tuliskan langkah-langkah memasak dengan detail...',
-                          hintStyle: const TextStyle(
-                            color: Color(0xFFC4AFA5),
-                          ),
-                          filled: true,
-                          fillColor: const Color(0xFFF5EFEB),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 15,
-                            vertical: 12,
-                          ),
-                          prefixIcon: const Padding(
-                            padding: EdgeInsets.only(top: 12),
-                            child: Icon(
-                              Icons.format_list_numbered,
-                              color: Color(0xFFD9ACA3),
-                            ),
-                          ),
-                          prefixIconConstraints:
-                              const BoxConstraints(minWidth: 50),
-                        ),
-                      ),
-                    ],
-                  ),
+              ),
+              const SizedBox(height: 20),
+
+              // 3. Ingredients Section
+              _buildFormCard(
+                label: 'Bahan-Bahan',
+                child: TextField(
+                  controller: _descController,
+                  maxLines: 5,
+                  decoration: _buildInputDecoration(
+                      'Tuliskan semua bahan...', Icons.list_alt),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // 4. Cooking Steps Section
+              _buildFormCard(
+                label: 'Langkah-Langkah Memasak',
+                child: TextField(
+                  controller: _stepsController,
+                  maxLines: 5,
+                  decoration: _buildInputDecoration(
+                      'Tuliskan detail langkah...', Icons.format_list_numbered),
                 ),
               ),
               const SizedBox(height: 35),
 
-              // Submit Button
+              // 5. Submit Button
               SizedBox(
                 width: double.infinity,
                 height: 60,
                 child: ElevatedButton(
-                  onPressed: () {
-                    if (_nameController.text.isEmpty) {
-                      _showErrorSnackBar('Mohon isi nama resep');
-                      return;
-                    }
-                    if (_descController.text.isEmpty) {
-                      _showErrorSnackBar('Mohon isi bahan-bahan');
-                      return;
-                    }
-                    if (_stepsController.text.isEmpty) {
-                      _showErrorSnackBar('Mohon isi langkah-langkah memasak');
-                      return;
-                    }
-
-                    String? imagePath;
-                    if (_pickedImage != null) {
-                      imagePath = _pickedImage!.path;
-                    } else if (widget.recipe?.imagePath != null) {
-                      imagePath = widget.recipe!.imagePath;
-                    }
-
-                    final newRecipe = Recipe(
-                      name: _nameController.text,
-                      imagePath: imagePath,
-                      description: _descController.text,
-                      steps: _stepsController.text,
-                    );
-                    Navigator.pop(context, newRecipe);
-                  },
+                  onPressed: _submitData,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFF8E9DA),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
+                        borderRadius: BorderRadius.circular(15)),
                     elevation: 2,
-                    shadowColor: Colors.black.withOpacity(0.3),
                   ),
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(
-                        Icons.add_circle_outline,
-                        color: Color(0xFF4F3A38),
-                        size: 24,
-                      ),
+                      Icon(Icons.add_circle_outline, color: Color(0xFF4F3A38)),
                       SizedBox(width: 10),
-                      Text(
-                        'Tambahkan Resep',
-                        style: TextStyle(
-                          color: Color(0xFF4F3A38),
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
+                      Text('Tambahkan Resep',
+                          style: TextStyle(
+                              color: Color(0xFF4F3A38),
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
@@ -423,5 +284,66 @@ class _TambahResepState extends State<TambahResep> {
         ),
       ),
     );
+  }
+
+  // --- Widget Helper untuk Scannability ---
+
+  Widget _buildFormCard({required String label, required Widget child}) {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+      color: Colors.white.withOpacity(0.8),
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label,
+                style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF4F3A38))),
+            const SizedBox(height: 10),
+            child,
+          ],
+        ),
+      ),
+    );
+  }
+
+  InputDecoration _buildInputDecoration(String hint, IconData icon) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(color: Color(0xFFC4AFA5)),
+      filled: true,
+      fillColor: const Color(0xFFF5EFEB),
+      prefixIcon: Icon(icon, color: const Color(0xFFD9ACA3)),
+      border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+    );
+  }
+
+  void _submitData() {
+    if (_nameController.text.isEmpty ||
+        _selectedCategory == null ||
+        _descController.text.isEmpty ||
+        _stepsController.text.isEmpty) {
+      _showErrorSnackBar('Mohon lengkapi semua data dan pilih kategori');
+      return;
+    }
+
+    String? imagePath = _pickedImage?.path ?? widget.recipe?.imagePath;
+
+    final newRecipe = Recipe(
+      name: _nameController.text,
+      imagePath: imagePath,
+      description: _descController.text,
+      steps: _stepsController.text,
+      // Jangan lupa tambahkan field ini di model Recipe kamu:
+      // category: _selectedCategory,
+      // isPublic: _isPublic,
+    );
+    Navigator.pop(context, newRecipe);
   }
 }
