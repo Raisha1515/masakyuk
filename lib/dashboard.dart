@@ -241,10 +241,8 @@ class _DashboardState extends State<Dashboard> {
               _filterItem("Sarapan", "🍳"),
               _filterItem("Makan Siang", "🍲"),
               _filterItem("Makan Malam", "🍱"),
-              _filterItem("Camilan", "🍿"),
-              _filterItem("Minuman", "🥤"), // Tambahan baru
-              _filterItem("Dessert", "🍰"), // Tambahan baru
-              _filterItem("Pedas", "🌶️"),    // Tambahan baru
+              _filterItem("Diet", "🥬"),
+              _filterItem("Dessert", "🍰"),
             ],
           ),
         ),
