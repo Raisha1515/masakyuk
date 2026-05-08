@@ -20,7 +20,8 @@ class _DashboardState extends State<Dashboard> {
   Set<int> favoritedIndices = {};
   List<String> notificationList = []; 
   int _selectedIndex = 0; // 0: Home, 1: Notification, 2: Favorite, 3: Profile
-  
+  // Letakkan di bawah list-list data kamu
+  String selectedCategory = "Semua";
 
   String userName = "Raisha";
   String userPassword = "";
@@ -176,6 +177,10 @@ class _DashboardState extends State<Dashboard> {
 
   // --- HALAMAN HOME ---
   Widget buildHomePage() {
+    List<Recipe> filteredRecipes = selectedCategory == "Semua"
+      ? recipeList
+      : recipeList.where((r) => r.category == selectedCategory).toList();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -223,11 +228,36 @@ class _DashboardState extends State<Dashboard> {
             child: const TextField(decoration: InputDecoration(hintText: "Cari resep...", border: InputBorder.none, icon: Icon(Icons.search))),
           ),
         ),
+        const SizedBox(height: 15),
+        
+        // Baris Filter yang bisa digeser (Scrollable)
+        SizedBox(
+          height: 40,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            children: [
+              _filterItem("Semua", "🍽️"),
+              _filterItem("Sarapan", "🍳"),
+              _filterItem("Makan Siang", "🍲"),
+              _filterItem("Makan Malam", "🍱"),
+              _filterItem("Diet", "🥬"),
+              _filterItem("Dessert", "🍰"),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 15),
         const SizedBox(height: 20),
         Expanded(
-          child: recipeList.isEmpty
-              ? const Center(child: Text("Belum ada resep."))
-              : buildGrid(recipeList, isFavoritePage: false),
+          child: filteredRecipes.isEmpty
+              ? const Center(
+                  child: Text(
+                    "Belum ada resep di kategori ini.",
+                    style: TextStyle(color: Color(0xFF4F3A38)),
+                  ),
+                )
+              : buildGrid(filteredRecipes, isFavoritePage: false),
         ),
       ],
     );
@@ -491,4 +521,38 @@ class _DashboardState extends State<Dashboard> {
       ),
     );
   }
+
+
+  //Fitur Filter kategori
+  Widget _filterItem(String name, String emoji) {
+  bool isSelected = selectedCategory == name;
+  return GestureDetector(
+    onTap: () {
+      setState(() {
+        selectedCategory = name; // Update kategori saat diklik
+      });
+    },
+    child: Container(
+      margin: const EdgeInsets.only(right: 10), // Jarak antar tombol
+      padding: const EdgeInsets.symmetric(horizontal: 15),
+      decoration: BoxDecoration(
+        color: isSelected ? const Color(0xFFFF4081) : const Color(0xFFFCEEE4),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 16)),
+          const SizedBox(width: 5),
+          Text(
+            name,
+            style: TextStyle(
+              color: isSelected ? Colors.white : const Color(0xFF4F3A38),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 }
