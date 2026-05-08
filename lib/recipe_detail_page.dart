@@ -64,7 +64,7 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> {
     final commentId = 'comment_${DateTime.now().millisecondsSinceEpoch}';
     final newComment = Comment(
       id: commentId,
-      author: widget.userName ?? 'Pengguna',
+      author: widget.userName,
       text: text,
       timestamp: DateTime.now(),
     );

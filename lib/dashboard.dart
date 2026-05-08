@@ -20,6 +20,7 @@ class _DashboardState extends State<Dashboard> {
   Set<int> favoritedIndices = {};
   List<String> notificationList = []; 
   int _selectedIndex = 0; // 0: Home, 1: Notification, 2: Favorite, 3: Profile
+  
 
   String userName = "Raisha";
   String userPassword = "";
