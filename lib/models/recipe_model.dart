@@ -57,9 +57,12 @@ class Recipe {
   final String description;
   final String steps;
   final String category;
-  final bool isPublic;
   final List<Comment> comments;
   final List<Rating> ratings;
+  
+  String? owner;
+  bool isPrivate;
+  bool isPublic;
 
   Recipe({
     required this.id,
@@ -68,10 +71,13 @@ class Recipe {
     required this.description,
     required this.steps,
     required this.category,
+    this.owner,
+    this.isPrivate = false,
     this.isPublic = true,
     List<Comment>? comments,
     List<Rating>? ratings,
-  }) : comments = comments ?? [],
+  }) 
+  : comments = comments ?? [],
        ratings = ratings ?? [];
 
   double get averageRating {
@@ -86,7 +92,9 @@ class Recipe {
     'description': description,
     'steps': steps,
     'category': category,
+    'isPrivate': isPrivate,
     'isPublic': isPublic,
+    'owner': owner,
     'comments': comments.map((c) => c.toJson()).toList(),
     'ratings': ratings.map((r) => r.toJson()).toList(),
   };
@@ -98,6 +106,8 @@ class Recipe {
     description: json['description'],
     steps: json['steps'],
     category: json['category'] ?? '',
+    owner: json['owner'],
+    isPrivate: json['isPrivate'] ?? false,
     isPublic: json['isPublic'] ?? true,
     comments: (json['comments'] as List?)?.map((c) => Comment.fromJson(c as Map<String, dynamic>)).toList(),
     ratings: (json['ratings'] as List?)?.map((r) => Rating.fromJson(r as Map<String, dynamic>)).toList(),

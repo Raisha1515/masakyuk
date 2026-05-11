@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart'; // Import package ini
 import '../models/recipe_model.dart';
@@ -141,7 +142,8 @@ class _AddPageState extends State<AddPage> {
                       description: _descController.text,
                       steps: "-",
                       category: "Umum",
-                      isPublic: true,
+                      isPrivate: true,
+                      owner: userName, // Gunakan username pengguna saat ini
                     );
 
                     Navigator.pop(context, newRecipe);

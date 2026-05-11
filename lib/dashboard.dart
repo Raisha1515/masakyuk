@@ -6,6 +6,8 @@ import 'package:masakyuk/models/recipe_model.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:masakyuk/tambah_resep.dart';
 import 'package:masakyuk/login.dart';
+import 'package:masakyuk/private_recipes_page.dart';
+import 'trending_page.dart';
 import 'package:masakyuk/recipe_detail_page.dart';
 
 class Dashboard extends StatefulWidget {
@@ -77,6 +79,9 @@ class _DashboardState extends State<Dashboard> {
   void _backToHome() {
     setState(() => _selectedIndex = 0);
   }
+  Future<void> _logout() async {
+Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => const LoginPage()), (route) => false, );
+  }
 
   // Helper method untuk display gambar yang support web dan mobile
   ImageProvider getImageProvider(String imagePath) {
@@ -89,21 +94,42 @@ class _DashboardState extends State<Dashboard> {
     }
   }
 
+  // void _showRecipeDetail(Recipe recipe) {
+  //   Navigator.push(
+  //     context,
+  //     MaterialPageRoute(
+  //       builder: (context) => RecipeDetailPage(
+  //         recipe: recipe,
+  //         userName: userName, // Kirim nama pengguna ke halaman detail
+  //         onRecipeUpdated: (updatedRecipe) {
+  //           setState(() {
+  //             int index = recipeList.indexWhere((r) => r.id == updatedRecipe.id);
+  //             if (index != -1) {
+  //               recipeList[index] = updatedRecipe;
+  //             }
+  //           });
+  //           _saveAllData();
+  //         },
+  //       ),
+  //     ),
+  //   );
+  // }
   void _showRecipeDetail(Recipe recipe) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => RecipeDetailPage(
+        builder: (_) => RecipeDetailPage(
           recipe: recipe,
-          userName: userName, // Kirim nama pengguna ke halaman detail
-          onRecipeUpdated: (updatedRecipe) {
-            setState(() {
-              int index = recipeList.indexWhere((r) => r.id == updatedRecipe.id);
-              if (index != -1) {
-                recipeList[index] = updatedRecipe;
-              }
-            });
-            _saveAllData();
+          userName: userName,
+          onRecipeUpdated: (updatedRecipe) async {
+            int idx = recipeList.indexWhere((r) => r.id == updatedRecipe.id);
+
+            if (idx != -1) {
+              setState(() {
+                recipeList[idx] = updatedRecipe;
+              });
+              await _saveAllData();
+            }
           },
         ),
       ),
@@ -175,11 +201,118 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
+  Widget trendingCard(
+    int index,
+    String title,
+    String image,
+    String likes,
+    String comments,
+    String status,
+  ) {
+    return Container(
+      width: 170,
+      margin: const EdgeInsets.only(right: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(14),
+                  topRight: Radius.circular(14),
+                ),
+                child: Image.asset(
+                  image,
+                  width: double.infinity,
+                  height: 100,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Positioned(
+                left: 8,
+                top: 8,
+                child: CircleAvatar(
+                  radius: 14,
+                  backgroundColor: Colors.orange,
+                  child: Text(
+                    '$index',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.favorite,
+                        size: 14, color: Colors.red),
+                    const SizedBox(width: 6),
+                    Text(likes,
+                        style: const TextStyle(fontSize: 12)),
+                    const SizedBox(width: 10),
+                    const Icon(Icons.chat_bubble_outline,
+                        size: 14, color: Colors.grey),
+                    const SizedBox(width: 6),
+                    Text(comments,
+                        style: const TextStyle(fontSize: 12)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Icon(
+                      status == 'Naik'
+                          ? Icons.arrow_upward
+                          : Icons.remove,
+                      size: 14,
+                      color: status == 'Naik'
+                          ? Colors.green
+                          : Colors.grey,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(status,
+                        style: const TextStyle(fontSize: 12)),
+                  ],
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
+    );
+  }
   // --- HALAMAN HOME ---
   Widget buildHomePage() {
-    List<Recipe> filteredRecipes = selectedCategory == "Semua"
-      ? recipeList
-      : recipeList.where((r) => r.category == selectedCategory).toList();
+    List<Recipe> visibleRecipes = recipeList
+    .where((r) => !r.isPrivate || r.owner == userName)
+    .toList();
+
+  List<Recipe> filteredRecipes = selectedCategory == "Semua"
+      ? visibleRecipes
+      : visibleRecipes.where((r) => r.category == selectedCategory).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -248,6 +381,77 @@ class _DashboardState extends State<Dashboard> {
         ),
 
         const SizedBox(height: 15),
+
+        // ===== TRENDING SECTION =====
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: const [
+                  Icon(Icons.local_fire_department,
+                      color: Colors.orange),
+                  SizedBox(width: 8),
+                  Text(
+                    'Lagi Trending',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const TrendingPage(),
+                    ),
+                  );
+                },
+                child: const Text('Lihat Semua'),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        SizedBox(
+          height: 190,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            children: [
+              trendingCard(
+                1,
+                'Resep Rendang',
+                'assets/images/1.png',
+                '2.4rb',
+                '318',
+                'Naik',
+              ),
+              trendingCard(
+                2,
+                'Nasi Goreng',
+                'assets/images/2.png',
+                '1.8rb',
+                '241',
+                'Naik',
+              ),
+              trendingCard(
+                3,
+                'Opor Ayam',
+                'assets/images/1.png',
+                '1.2rb',
+                '190',
+                'Stabil',
+              ),
+            ],
+          ),
+        ),
         const SizedBox(height: 20),
         Expanded(
           child: filteredRecipes.isEmpty
@@ -281,10 +485,18 @@ class _DashboardState extends State<Dashboard> {
           IconButton(
             icon: const Icon(Icons.add_circle, size: 50, color: Color(0xFFFF4081)), 
             onPressed: () async {
-              final result = await Navigator.push(context, MaterialPageRoute(builder: (_) => const TambahResep()));
-              if (result != null && result is Recipe) { 
-                setState(() => recipeList.add(result)); 
-                _saveAllData(); 
+              final result = await Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TambahResep()),
+              );
+              if (result != null && result is Recipe) {
+                result.owner = userName;
+                result.isPrivate = false;
+                result.isPublic = true;
+                setState(() {
+                  recipeList.add(result);
+                });
+                await _saveAllData();
               }
             }
           ),
@@ -456,6 +668,25 @@ class _DashboardState extends State<Dashboard> {
           const SizedBox(height: 30),
           buildEditField("Edit Profil :", "Masukkan nama baru...", _nameEditController, Icons.edit_note),
           buildEditField("Ubah Kata Sandi :", "Masukkan sandi baru...", _passEditController, Icons.lock_outline),
+          SizedBox(
+            width: 200,
+            child: OutlinedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PrivateRecipesPage(
+                      recipes: recipeList,
+                      username: userName,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.lock_outline),
+              label: const Text('Resep Privat'),
+            ),
+          ),
+          const SizedBox(height: 20),
           const SizedBox(height: 30),
           
           // TOMBOL SIMPAN
@@ -479,11 +710,7 @@ class _DashboardState extends State<Dashboard> {
           // TOMBOL LOGOUT
           OutlinedButton.icon(
             onPressed: () {
-              Navigator.pushAndRemoveUntil(
-                context, 
-                MaterialPageRoute(builder: (context) => const LoginPage()),
-                (route) => false,
-              );
+              _logout();
             },
             icon: const Icon(Icons.logout, color: Colors.red),
             label: const Text("Keluar Akun", style: TextStyle(color: Colors.red)),

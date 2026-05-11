@@ -197,37 +197,7 @@ class _TambahResepState extends State<TambahResep> {
               ),
               const SizedBox(height: 20),
 
-              // --- FITUR BARU: STATUS PUBLIKASI ---
-              _buildFormCard(
-                label: 'Status Publikasi',
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: RadioListTile<bool>(
-                        title: const Text('Public',
-                            style: TextStyle(fontSize: 14)),
-                        value: true,
-                        groupValue: _isPublic,
-                        activeColor: const Color(0xFFFF4081),
-                        onChanged: (val) => setState(() => _isPublic = val!),
-                      ),
-                    ),
-                    Expanded(
-                      child: RadioListTile<bool>(
-                        title: const Text('Private',
-                            style: TextStyle(fontSize: 14)),
-                        value: false,
-                        groupValue: _isPublic,
-                        activeColor: const Color(0xFFFF4081),
-                        onChanged: (val) => setState(() => _isPublic = val!),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              // 3. Ingredients Section
+              // 2. Ingredients Section
               _buildFormCard(
                 label: 'Bahan-Bahan',
                 child: TextField(

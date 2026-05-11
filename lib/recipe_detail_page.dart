@@ -6,7 +6,7 @@ import 'package:masakyuk/tambah_resep.dart';
 
 class RecipeDetailPage extends StatefulWidget {
   final Recipe recipe;
-  final String userName; // Tambahkan ini
+  final String userName;
   final Function(Recipe) onRecipeUpdated;
 
   const RecipeDetailPage({
@@ -47,47 +47,71 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> {
   }
 
   void _addRating(int stars) {
-    final ratingId = 'rating_${DateTime.now().millisecondsSinceEpoch}';
     final newRating = Rating(
-      id: ratingId,
+      id: 'rating_${DateTime.now().millisecondsSinceEpoch}',
       stars: stars,
       timestamp: DateTime.now(),
     );
+
     setState(() {
       recipe.ratings.add(newRating);
     });
+
     widget.onRecipeUpdated(recipe);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rating berhasil ditambahkan!')));
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Rating berhasil ditambahkan!')),
+    );
   }
 
   void _addComment(String text) {
-    final commentId = 'comment_${DateTime.now().millisecondsSinceEpoch}';
     final newComment = Comment(
-      id: commentId,
+      id: 'comment_${DateTime.now().millisecondsSinceEpoch}',
       author: widget.userName,
       text: text,
       timestamp: DateTime.now(),
     );
+
     setState(() {
       recipe.comments.add(newComment);
     });
+
     widget.onRecipeUpdated(recipe);
   }
 
   String _formatTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
+    final difference = DateTime.now().difference(dateTime);
 
-    if (difference.inSeconds < 60) {
-      return 'Baru saja';
-    } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes}m lalu';
-    } else if (difference.inHours < 24) {
-      return '${difference.inHours}h lalu';
-    } else if (difference.inDays < 7) {
-      return '${difference.inDays}d lalu';
-    } else {
-      return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+    if (difference.inSeconds < 60) return 'Baru saja';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m lalu';
+    if (difference.inHours < 24) return '${difference.inHours}h lalu';
+    if (difference.inDays < 7) return '${difference.inDays}d lalu';
+
+    return '${dateTime.day}/${dateTime.month}/${dateTime.year}';
+  }
+
+  Future<void> _editRecipe() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => TambahResep(recipe: recipe),
+      ),
+    );
+
+    if (result != null && result is Recipe) {
+      result.owner = recipe.owner;
+      result.isPrivate = recipe.isPrivate;
+      result.isPublic = recipe.isPublic;
+
+      setState(() {
+        recipe = result;
+      });
+
+      widget.onRecipeUpdated(recipe);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Resep berhasil diperbarui')),
+      );
     }
   }
 
@@ -99,338 +123,240 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF4F3A38)),
+          icon: const Icon(Icons.arrow_back_ios_new,
+              color: Color(0xFF4F3A38)),
           onPressed: () => Navigator.pop(context),
         ),
         centerTitle: true,
         title: const Text(
           'Detail Resep',
-          style: TextStyle(color: Color(0xFF4F3A38), fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Color(0xFF4F3A38),
+            fontWeight: FontWeight.bold,
+          ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit, color: Color(0xFF4F3A38)),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => TambahResep(recipe: recipe),
-                ),
-              );
-            },
-          ),
+          if (recipe.owner == widget.userName)
+            IconButton(
+              icon: const Icon(Icons.edit, color: Color(0xFF4F3A38)),
+              onPressed: _editRecipe,
+            ),
         ],
       ),
       body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (recipe.imagePath != null)
-                Container(
-                  width: double.infinity,
-                  height: 250,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(15),
-                    image: DecorationImage(
-                      image: getImageProvider(recipe.imagePath!),
-                      fit: BoxFit.cover,
-                    ),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (recipe.imagePath != null)
+              Container(
+                width: double.infinity,
+                height: 250,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(15),
+                  image: DecorationImage(
+                    image: getImageProvider(recipe.imagePath!),
+                    fit: BoxFit.cover,
                   ),
-                )
-              else
-                Container(
-                  width: double.infinity,
-                  height: 250,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(15),
-                    color: Colors.grey[300],
-                  ),
-                  child: const Icon(Icons.image_not_supported, size: 60),
                 ),
+              )
+            else
+              Container(
+                width: double.infinity,
+                height: 250,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                child: const Icon(Icons.image_not_supported, size: 60),
+              ),
+
+            const SizedBox(height: 20),
+
+            Text(
+              recipe.name,
+              style: const TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF4F3A38),
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            if (recipe.category.isNotEmpty)
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFF4081),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  recipe.category,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+
+            const SizedBox(height: 20),
+
+            if (recipe.owner == widget.userName)
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFCEEE4),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.lock_outline),
+                    const SizedBox(width: 8),
+                    const Text('Privatkan resep ini'),
+                    const Spacer(),
+                    Switch(
+                      value: recipe.isPrivate,
+                      onChanged: (value) {
+                        setState(() {
+                          recipe.isPrivate = value;
+                          recipe.isPublic = !value;
+                        });
+
+                        widget.onRecipeUpdated(recipe);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+            const SizedBox(height: 25),
+
+            const Text(
+              'Bahan-Bahan:',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFCEEE4),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(recipe.description),
+            ),
+
+            const SizedBox(height: 20),
+
+            const Text(
+              'Langkah-Langkah:',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 10),
+
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFCEEE4),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(recipe.steps),
+            ),
+
+            const SizedBox(height: 30),
+
+            if (recipe.isPublic) ...[
+              Text(
+                '⭐ ${recipe.averageRating.toStringAsFixed(1)} / 5.0',
+                style: const TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+
+              Text('Berdasarkan ${recipe.ratings.length} ulasan'),
+
               const SizedBox(height: 20),
 
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          recipe.name,
-                          style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF4F3A38)),
-                        ),
-                        const SizedBox(height: 8),
-                        if (recipe.category.isNotEmpty)
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFFF4081),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Text(
-                              recipe.category,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                      ],
+                children: List.generate(5, (index) {
+                  return GestureDetector(
+                    onTap: () => setState(() => selectedRating = index + 1),
+                    child: Icon(
+                      selectedRating > index
+                          ? Icons.star
+                          : Icons.star_border,
+                      color: Colors.orange,
+                      size: 35,
                     ),
-                  ),
-                ],
+                  );
+                }),
               ),
-              const SizedBox(height: 25),
 
-              const Text(
-                'Bahan-Bahan:',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF4F3A38)),
+              const SizedBox(height: 15),
+
+              TextField(
+                controller: commentController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: 'Tulis komentar...',
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
               ),
-              const SizedBox(height: 12),
-              Container(
+
+              const SizedBox(height: 15),
+
+              SizedBox(
                 width: double.infinity,
-                padding: const EdgeInsets.all(15),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFCEEE4),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  recipe.description,
-                  style: const TextStyle(fontSize: 14, height: 1.6),
-                ),
-              ),
-              const SizedBox(height: 25),
+                child: ElevatedButton(
+                  onPressed: () {
+                    if (commentController.text.isNotEmpty &&
+                        selectedRating > 0) {
+                      _addComment(commentController.text);
+                      _addRating(selectedRating);
 
-              const Text(
-                'Langkah-Langkah:',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF4F3A38)),
-              ),
-              const SizedBox(height: 12),
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(15),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFCEEE4),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  recipe.steps,
-                  style: const TextStyle(fontSize: 14, height: 1.6),
+                      commentController.clear();
+
+                      setState(() {
+                        selectedRating = 0;
+                      });
+                    }
+                  },
+                  child: const Text('Kirim Review'),
                 ),
               ),
-              const SizedBox(height: 30),
 
-              if (recipe.isPublic) ...[
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF2D8D0),
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Review & Komentar',
-                        style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF4A2C2A)),
-                      ),
-                      const SizedBox(height: 20),
-
-                      Center(
-                        child: Column(
-                          children: [
-                            RichText(
-                              text: TextSpan(
-                                children: [
-                                  TextSpan(
-                                    text: recipe.averageRating.toStringAsFixed(1),
-                                    style: const TextStyle(
-                                      fontSize: 48,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF4A2C2A),
-                                    ),
-                                  ),
-                                  const TextSpan(
-                                    text: ' / 5.0',
-                                    style: TextStyle(
-                                      fontSize: 24,
-                                      color: Color(0xFF4A2C2A),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: List.generate(5, (index) {
-                                return Icon(
-                                  index < recipe.averageRating.floor()
-                                      ? Icons.star
-                                      : (index < recipe.averageRating ? Icons.star_half : Icons.star_border),
-                                  color: Colors.orangeAccent,
-                                  size: 30,
-                                );
-                              }),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Berdasarkan ${recipe.ratings.length} ulasan',
-                              style: TextStyle(color: Colors.grey[700], fontSize: 14),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 25),
-
-                      if (recipe.comments.isNotEmpty)
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Komentar Pengguna:',
-                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF4A2C2A)),
-                            ),
-                            const SizedBox(height: 15),
-                            ...recipe.comments.map((comment) {
-                              return Padding(
-                                padding: const EdgeInsets.only(bottom: 20),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const CircleAvatar(
-                                      radius: 22,
-                                      backgroundColor: Color(0xFFD9ACA3),
-                                      child: Icon(Icons.person, color: Colors.white),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text(
-                                                comment.author,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 15,
-                                                  color: Color(0xFF4A2C2A),
-                                                ),
-                                              ),
-                                              Text(
-                                                _formatTime(comment.timestamp),
-                                                style: const TextStyle(
-                                                  fontSize: 11,
-                                                  color: Colors.grey,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Text(
-                                            comment.text,
-                                            style: const TextStyle(fontSize: 13, color: Color(0xFF2D2D2D)),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                            const Divider(height: 30, thickness: 1),
-                          ],
-                        ),
-
-                      const SizedBox(height: 15),
-                      const Text(
-                        'Tulis Review Anda',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF4A2C2A)),
-                      ),
-                      const SizedBox(height: 12),
-
-                      const Text(
-                        'Berikan Rating:',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: List.generate(5, (index) {
-                          return GestureDetector(
-                            onTap: () => setState(() => selectedRating = index + 1),
-                            child: Icon(
-                              selectedRating > index ? Icons.star : Icons.star_border,
-                              color: Colors.orangeAccent,
-                              size: 40,
-                            ),
-                          );
-                        }),
-                      ),
-                      const SizedBox(height: 20),
-
-                      TextField(
-                        controller: commentController,
-                        maxLines: 3,
-                        decoration: InputDecoration(
-                          hintText: 'Tulis komentar Anda di sini...',
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.all(12),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      SizedBox(
-                        width: double.infinity,
-                        height: 50,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            if (commentController.text.isNotEmpty && selectedRating > 0) {
-                              _addComment(commentController.text);
-                              _addRating(selectedRating);
-                              commentController.clear();
-                              setState(() => selectedRating = 0);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Review berhasil ditambahkan!')),
-                              );
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Silakan isi rating dan komentar')),
-                              );
-                            }
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF4A1C1C),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                          child: const Text(
-                            'Kirim Review',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
               const SizedBox(height: 20),
+
+              ...recipe.comments.map(
+                (comment) => ListTile(
+                  leading: const CircleAvatar(
+                    child: Icon(Icons.person),
+                  ),
+                  title: Text(comment.author),
+                  subtitle: Text(comment.text),
+                  trailing: Text(
+                    _formatTime(comment.timestamp),
+                    style: const TextStyle(fontSize: 11),
+                  ),
+                ),
+              ),
             ],
-          ),
+          ],
         ),
       ),
     );

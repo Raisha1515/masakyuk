@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'halaman_utama.dart';
-
+import 'login.dart';
+import 'register.dart';
+import 'forgot_password.dart';
+import 'dashboard.dart';
+import 'trending_page.dart';
 void main() {
   runApp(const MyApp());
 }
