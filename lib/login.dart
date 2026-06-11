@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:masakyuk/services/auth_service.dart';
 import 'register.dart';
 import 'forgot_password.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'dashboard.dart';
 
 class LoginPage extends StatefulWidget {
@@ -13,28 +13,43 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   bool isHovering = false;
+  bool isLoading = false;
 
-  final TextEditingController usernameController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
 
-  Future<void> login() async {
-    final prefs = await SharedPreferences.getInstance();
+    Future<void> login() async {
+    // 2. Perbarui pesan validasi
+    if (emailController.text.isEmpty || passwordController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email dan kata sandi harus diisi')),
+      );
+      return;
+    }
 
-    final savedUser = prefs.getString("username");
-    final savedPass = prefs.getString("password");
+    setState(() => isLoading = true);
 
-    if (!mounted) return;
+    try {
+      final authService = AuthService();
 
-    if (usernameController.text == savedUser &&
-        passwordController.text == savedPass) {
+      await authService.login(
+        email: emailController.text.trim().toLowerCase(), // Tambahkan .trim() untuk membuang spasi tidak sengaja
+        password: passwordController.text,
+      );
+
+      if (!mounted) return;
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => const Dashboard()),
       );
-    } else {
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Username atau Password salah')),
+        SnackBar(content: Text('Login gagal: ${e.toString()}')),
       );
+    } finally {
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -85,7 +100,7 @@ class _LoginPageState extends State<LoginPage> {
                   const SizedBox(height: 25),
 
                   const Text(
-                    "Username",
+                    "Email",
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
@@ -109,10 +124,11 @@ class _LoginPageState extends State<LoginPage> {
                         const SizedBox(width: 12),
                         Expanded(
                           child: TextField(
-                            controller: usernameController,
+                            controller: emailController,
+                            keyboardType: TextInputType.emailAddress,
                             decoration: const InputDecoration(
                               border: InputBorder.none,
-                              hintText: "rararrara12",
+                              hintText: "your_email@example.com",
                               hintStyle: TextStyle(
                                 color: Color(0xFF8E6F6A),
                               ),
@@ -202,15 +218,25 @@ class _LoginPageState extends State<LoginPage> {
                         borderRadius: BorderRadius.circular(35),
                       ),
                       child: TextButton(
-                        onPressed: login, // ← INI PENTING!
-                        child: const Text(
-                          "Selanjutnya",
-                          style: TextStyle(
-                            fontSize: 24,
-                            color: Color(0xFF4F3A38),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
+                        onPressed: isLoading ? null : login,
+                        child: isLoading
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    Color(0xFF4F3A38),
+                                  ),
+                                ),
+                              )
+                            : const Text(
+                                "Selanjutnya",
+                                style: TextStyle(
+                                  fontSize: 24,
+                                  color: Color(0xFF4F3A38),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
                       ),
                     ),
                   ),

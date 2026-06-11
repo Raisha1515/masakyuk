@@ -1,11 +1,20 @@
 import 'package:flutter/material.dart';
 import 'halaman_utama.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'core/supabase_config.dart';
 import 'login.dart';
 import 'register.dart';
 import 'forgot_password.dart';
 import 'dashboard.dart';
 import 'trending_page.dart';
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: SupabaseConfig.supabaseUrl,
+    anonKey: SupabaseConfig.supabaseAnonKey,
+  );
+
   runApp(const MyApp());
 }
 

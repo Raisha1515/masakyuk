@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:masakyuk/services/auth_service.dart';
 import 'login.dart';
 
 class RegisterPage extends StatefulWidget {
@@ -10,6 +10,8 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
+  final TextEditingController emailController =
+  TextEditingController();
   final TextEditingController usernameController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
   final TextEditingController confirmPasswordController = TextEditingController();
@@ -28,6 +30,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   void dispose() {
+    emailController.dispose();
     usernameController.dispose();
     passwordController.dispose();
     confirmPasswordController.dispose();
@@ -36,6 +39,16 @@ class _RegisterPageState extends State<RegisterPage> {
 
   bool _validateInputs() {
     setState(() => errorMessage = null);
+
+    if (emailController.text.isEmpty) {
+      setState(() => errorMessage = 'Email tidak boleh kosong');
+      return false;
+    }
+
+    if (!emailController.text.contains('@')) {
+      setState(() => errorMessage = 'Format email tidak valid');
+      return false;
+    }
 
     if (usernameController.text.isEmpty) {
       setState(() => errorMessage = 'Username tidak boleh kosong');
@@ -76,11 +89,14 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => isLoading = true);
 
     try {
-      await Future.delayed(const Duration(milliseconds: 800));
+      final authService = AuthService();
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString("username", usernameController.text);
-      await prefs.setString("password", passwordController.text);
+      // Register user ke Supabase
+      await authService.register(
+        email: emailController.text.trim(),
+        password: passwordController.text,
+        username: usernameController.text.trim(),
+      );
 
       if (!mounted) return;
 
@@ -101,7 +117,7 @@ class _RegisterPageState extends State<RegisterPage> {
         MaterialPageRoute(builder: (_) => const LoginPage()),
       );
     } catch (e) {
-      setState(() => errorMessage = 'Terjadi kesalahan. Coba lagi.');
+      setState(() => errorMessage = 'Error: ${e.toString()}');
     } finally {
       setState(() => isLoading = false);
     }
@@ -185,33 +201,89 @@ class _RegisterPageState extends State<RegisterPage> {
                     children: [
                       // Error Message
                       if (errorMessage != null) ...[
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.red[50],
-                            border: Border.all(color: Colors.red[300]!),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(Icons.error_outline, color: Colors.red[700]),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Text(
-                                  errorMessage!,
-                                  style: TextStyle(
-                                    color: Colors.red[700],
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red[50],
+                          border: Border.all(color: Colors.red[300]!),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.error_outline, color: Colors.red[700]),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                errorMessage!,
+                                style: TextStyle(
+                                  color: Colors.red[700],
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
                                 ),
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 20),
-                      ],
+                      ),
+                      const SizedBox(height: 20),
+                    ],
 
+                    // ================= PERBAIKAN INPUT EMAIL =================
+                    const Text(
+                      "Email",
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: darkBrown,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      height: 55,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: accentBrown,
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: primaryBrown.withOpacity(0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.email_outlined, color: mediumBrown, size: 22),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: TextField(
+                              controller: emailController,
+                              enabled: !isLoading,
+                              keyboardType: TextInputType.emailAddress,
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                hintText: "contoh@gmail.com",
+                                hintStyle: TextStyle(
+                                  color: mediumBrown,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              style: const TextStyle(
+                                color: darkBrown,
+                                fontSize: 15,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 22),
                       // Username Field
                       const Text(
                         "Username",

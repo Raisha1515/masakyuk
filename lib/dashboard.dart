@@ -1,9 +1,13 @@
 import 'dart:io';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:masakyuk/models/recipe_model.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:masakyuk/services/recipe_service.dart';
+import 'package:masakyuk/services/favorite_service.dart';
+import 'package:masakyuk/services/auth_service.dart';
+import 'package:masakyuk/services/user_service.dart';
+import 'package:masakyuk/models/user_model.dart';
 import 'package:masakyuk/tambah_resep.dart';
 import 'package:masakyuk/login.dart';
 import 'package:masakyuk/private_recipes_page.dart';
@@ -18,118 +22,107 @@ class Dashboard extends StatefulWidget {
 }
 
 class _DashboardState extends State<Dashboard> {
+  late AuthService authService;
+  late RecipeService recipeService;
+  late FavoriteService favoriteService;
+  late UserService userService;
+
   List<Recipe> recipeList = [];
-  Set<int> favoritedIndices = {};
-  List<String> notificationList = []; 
-  int _selectedIndex = 0; // 0: Home, 1: Notification, 2: Favorite, 3: Profile
-  // Letakkan di bawah list-list data kamu
+  List<Recipe> favoriteRecipesList = [];
+  List<String> notificationList = [];
+  int _selectedIndex = 0;
   String selectedCategory = "Semua";
 
-  String userName = "Raisha";
-  String userPassword = "";
+  UserProfile? userProfile;
+  String? userId;
+  bool isLoading = true;
 
   final TextEditingController _nameEditController = TextEditingController();
-  final TextEditingController _passEditController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    authService = AuthService();
+    recipeService = RecipeService();
+    favoriteService = FavoriteService();
+    userService = UserService();
+
+    userId = authService.getCurrentUserId();
     _loadAllData();
   }
 
-  Future<void> _saveAllData() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString("username", userName);
-    await prefs.setString("password", userPassword);
+  Future<void> _loadAllData() async {
+    try {
+      if (userId == null) {
+        _logout();
+        return;
+      }
 
-    List<String> recipeJsonList = recipeList.map((r) => jsonEncode(r.toJson())).toList();
-    await prefs.setStringList("saved_recipes", recipeJsonList);
-    await prefs.setStringList("saved_notifications", notificationList);
+      setState(() => isLoading = true);
 
-    List<String> favList = favoritedIndices.map((i) => i.toString()).toList();
-    await prefs.setStringList("saved_favorites", favList);
+      // Load user profile
+      userProfile = await userService.getCurrentUser();
+
+      // Load recipes
+      final recipes = await recipeService.getPublicRecipes();
+      setState(() => recipeList = recipes);
+
+      // Load favorites
+      final favorites = await favoriteService.getUserFavorites(userId!);
+      setState(() => favoriteRecipesList = favorites);
+
+      setState(() => isLoading = false);
+    } catch (e) {
+      print('Error loading data: $e');
+      setState(() => isLoading = false);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
   }
 
-  Future<void> _loadAllData() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      userName = prefs.getString("username") ?? "Raisha";
-      userPassword = prefs.getString("password") ?? "";
-      notificationList = prefs.getStringList("saved_notifications") ?? [];
-
-      List<String>? savedJsonRecipes = prefs.getStringList("saved_recipes");
-      if (savedJsonRecipes != null) {
-        recipeList = savedJsonRecipes.map((item) {
-          Map<String, dynamic> map = jsonDecode(item);
-          // Backward compatibility: generate ID for old recipes
-          if (map['id'] == null || map['id'].isEmpty) {
-            map['id'] = 'recipe_${map.hashCode}_${recipeList.length}';
-          }
-          return Recipe.fromJson(map);
-        }).toList();
-      }
-
-      List<String>? savedFavs = prefs.getStringList("saved_favorites");
-      if (savedFavs != null) {
-        favoritedIndices = savedFavs.map((i) => int.parse(i)).toSet();
-      }
-    });
+  Future<void> _logout() async {
+    try {
+      await authService.logout();
+      if (!mounted) return;
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Logout error: $e')),
+      );
+    }
   }
 
   void _backToHome() {
     setState(() => _selectedIndex = 0);
   }
-  Future<void> _logout() async {
-Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => const LoginPage()), (route) => false, );
-  }
 
-  // Helper method untuk display gambar yang support web dan mobile
   ImageProvider getImageProvider(String imagePath) {
     if (kIsWeb) {
-      // Di web, imagePath adalah blob URL
       return NetworkImage(imagePath);
     } else {
-      // Di mobile, imagePath adalah file path
       return FileImage(File(imagePath));
     }
   }
 
-  // void _showRecipeDetail(Recipe recipe) {
-  //   Navigator.push(
-  //     context,
-  //     MaterialPageRoute(
-  //       builder: (context) => RecipeDetailPage(
-  //         recipe: recipe,
-  //         userName: userName, // Kirim nama pengguna ke halaman detail
-  //         onRecipeUpdated: (updatedRecipe) {
-  //           setState(() {
-  //             int index = recipeList.indexWhere((r) => r.id == updatedRecipe.id);
-  //             if (index != -1) {
-  //               recipeList[index] = updatedRecipe;
-  //             }
-  //           });
-  //           _saveAllData();
-  //         },
-  //       ),
-  //     ),
-  //   );
-  // }
   void _showRecipeDetail(Recipe recipe) {
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => RecipeDetailPage(
           recipe: recipe,
-          userName: userName,
-          onRecipeUpdated: (updatedRecipe) async {
-            int idx = recipeList.indexWhere((r) => r.id == updatedRecipe.id);
-
-            if (idx != -1) {
-              setState(() {
+          userName: userProfile?.username ?? 'User',
+          onRecipeUpdated: (updatedRecipe) {
+            setState(() {
+              int idx = recipeList.indexWhere((r) => r.id == updatedRecipe.id);
+              if (idx != -1) {
                 recipeList[idx] = updatedRecipe;
-              });
-              await _saveAllData();
-            }
+              }
+            });
           },
         ),
       ),
@@ -139,7 +132,9 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
   @override
   Widget build(BuildContext context) {
     Widget bodyContent;
-    if (_selectedIndex == 3) {
+    if (isLoading) {
+      bodyContent = const Center(child: CircularProgressIndicator());
+    } else if (_selectedIndex == 3) {
       bodyContent = buildProfilePage();
     } else if (_selectedIndex == 2) {
       bodyContent = buildFavoritePage();
@@ -156,7 +151,6 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
     );
   }
 
-  // --- HALAMAN NOTIFIKASI ---
   Widget buildNotificationPage() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,14 +159,17 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
           padding: const EdgeInsets.all(15),
           child: Row(
             children: [
-              IconButton(icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF4F3A38)), onPressed: _backToHome),
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new, color: Color(0xFF4F3A38)),
+                onPressed: _backToHome,
+              ),
               const Text("Notifikasi", style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF4F3A38))),
             ],
           ),
         ),
         Expanded(
           child: notificationList.isEmpty
-              ? const Center(child: Text("Belum ada riwayat notifikasi."))
+              ? const Center(child: Text("Belum ada notifikasi."))
               : ListView.builder(
                   itemCount: notificationList.length,
                   itemBuilder: (context, index) {
@@ -180,7 +177,10 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
                     return Container(
                       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                       padding: const EdgeInsets.all(15),
-                      decoration: BoxDecoration(color: const Color(0xFFFCEEE4), borderRadius: BorderRadius.circular(15)),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFCEEE4),
+                        borderRadius: BorderRadius.circular(15),
+                      ),
                       child: Row(
                         children: [
                           const Icon(Icons.favorite, color: Colors.pink, size: 28),
@@ -188,7 +188,11 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
                           Expanded(
                             child: Text(
                               notificationList[reverseIndex],
-                              style: const TextStyle(color: Color(0xFF4F3A38), fontWeight: FontWeight.w500, fontSize: 15),
+                              style: const TextStyle(
+                                color: Color(0xFF4F3A38),
+                                fontWeight: FontWeight.w500,
+                                fontSize: 15,
+                              ),
                             ),
                           ),
                         ],
@@ -262,39 +266,29 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(Icons.favorite,
-                        size: 14, color: Colors.red),
+                    const Icon(Icons.favorite, size: 14, color: Colors.red),
                     const SizedBox(width: 6),
-                    Text(likes,
-                        style: const TextStyle(fontSize: 12)),
+                    Text(likes, style: const TextStyle(fontSize: 12)),
                     const SizedBox(width: 10),
-                    const Icon(Icons.chat_bubble_outline,
-                        size: 14, color: Colors.grey),
+                    const Icon(Icons.chat_bubble_outline, size: 14, color: Colors.grey),
                     const SizedBox(width: 6),
-                    Text(comments,
-                        style: const TextStyle(fontSize: 12)),
+                    Text(comments, style: const TextStyle(fontSize: 12)),
                   ],
                 ),
                 const SizedBox(height: 6),
                 Row(
                   children: [
                     Icon(
-                      status == 'Naik'
-                          ? Icons.arrow_upward
-                          : Icons.remove,
+                      status == 'Naik' ? Icons.arrow_upward : Icons.remove,
                       size: 14,
-                      color: status == 'Naik'
-                          ? Colors.green
-                          : Colors.grey,
+                      color: status == 'Naik' ? Colors.green : Colors.grey,
                     ),
                     const SizedBox(width: 6),
-                    Text(status,
-                        style: const TextStyle(fontSize: 12)),
+                    Text(status, style: const TextStyle(fontSize: 12)),
                   ],
                 ),
               ],
@@ -304,15 +298,15 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
       ),
     );
   }
-  // --- HALAMAN HOME ---
+
   Widget buildHomePage() {
     List<Recipe> visibleRecipes = recipeList
-    .where((r) => !r.isPrivate || r.owner == userName)
-    .toList();
+        .where((r) => !r.isPrivate || r.userId == userId)
+        .toList();
 
-  List<Recipe> filteredRecipes = selectedCategory == "Semua"
-      ? visibleRecipes
-      : visibleRecipes.where((r) => r.category == selectedCategory).toList();
+    List<Recipe> filteredRecipes = selectedCategory == "Semua"
+        ? visibleRecipes
+        : visibleRecipes.where((r) => r.category == selectedCategory).toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,7 +316,14 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("Hi, $userName", style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF4F3A38))),
+              Text(
+                "Hi, ${userProfile?.username ?? 'User'}",
+                style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF4F3A38),
+                ),
+              ),
               Row(
                 children: [
                   Stack(
@@ -333,12 +334,24 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
                       ),
                       if (notificationList.isNotEmpty)
                         Positioned(
-                          right: 8, top: 8,
+                          right: 8,
+                          top: 8,
                           child: Container(
                             padding: const EdgeInsets.all(2),
-                            decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(10)),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
                             constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
-                            child: Text('${notificationList.length}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+                            child: Text(
+                              '${notificationList.length}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         ),
                     ],
@@ -346,7 +359,15 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
                   const SizedBox(width: 5),
                   GestureDetector(
                     onTap: () => setState(() => _selectedIndex = 3),
-                    child: Container(width: 45, height: 45, decoration: const BoxDecoration(color: Color(0xFFFCEEE4), shape: BoxShape.circle), child: const Icon(Icons.person, color: Color(0xFFD9ACA3))),
+                    child: Container(
+                      width: 45,
+                      height: 45,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFCEEE4),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.person, color: Color(0xFFD9ACA3)),
+                    ),
                   ),
                 ],
               ),
@@ -357,13 +378,20 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 15),
-            decoration: BoxDecoration(color: const Color(0xFFFCEEE4), borderRadius: BorderRadius.circular(25)),
-            child: const TextField(decoration: InputDecoration(hintText: "Cari resep...", border: InputBorder.none, icon: Icon(Icons.search))),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFCEEE4),
+              borderRadius: BorderRadius.circular(25),
+            ),
+            child: const TextField(
+              decoration: InputDecoration(
+                hintText: "Cari resep...",
+                border: InputBorder.none,
+                icon: Icon(Icons.search),
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 15),
-        
-        // Baris Filter yang bisa digeser (Scrollable)
         SizedBox(
           height: 40,
           child: ListView(
@@ -379,10 +407,7 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
             ],
           ),
         ),
-
         const SizedBox(height: 15),
-
-        // ===== TRENDING SECTION =====
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Row(
@@ -390,15 +415,11 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
             children: [
               Row(
                 children: const [
-                  Icon(Icons.local_fire_department,
-                      color: Colors.orange),
+                  Icon(Icons.local_fire_department, color: Colors.orange),
                   SizedBox(width: 8),
                   Text(
                     'Lagi Trending',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
                   ),
                 ],
               ),
@@ -406,9 +427,7 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(
-                      builder: (_) => const TrendingPage(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const TrendingPage()),
                   );
                 },
                 child: const Text('Lihat Semua'),
@@ -416,39 +435,16 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
             ],
           ),
         ),
-
         const SizedBox(height: 10),
-
         SizedBox(
           height: 190,
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
             children: [
-              trendingCard(
-                1,
-                'Resep Rendang',
-                'assets/images/1.png',
-                '2.4rb',
-                '318',
-                'Naik',
-              ),
-              trendingCard(
-                2,
-                'Nasi Goreng',
-                'assets/images/2.png',
-                '1.8rb',
-                '241',
-                'Naik',
-              ),
-              trendingCard(
-                3,
-                'Opor Ayam',
-                'assets/images/1.png',
-                '1.2rb',
-                '190',
-                'Stabil',
-              ),
+              trendingCard(1, 'Resep Rendang', 'assets/images/1.png', '2.4rb', '318', 'Naik'),
+              trendingCard(2, 'Nasi Goreng', 'assets/images/2.png', '1.8rb', '241', 'Naik'),
+              trendingCard(3, 'Opor Ayam', 'assets/images/1.png', '1.2rb', '190', 'Stabil'),
             ],
           ),
         ),
@@ -456,10 +452,7 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
         Expanded(
           child: filteredRecipes.isEmpty
               ? const Center(
-                  child: Text(
-                    "Belum ada resep di kategori ini.",
-                    style: TextStyle(color: Color(0xFF4F3A38)),
-                  ),
+                  child: Text("Belum ada resep di kategori ini.", style: TextStyle(color: Color(0xFF4F3A38))),
                 )
               : buildGrid(filteredRecipes, isFavoritePage: false),
         ),
@@ -467,55 +460,66 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
     );
   }
 
-  // --- BOTTOM NAVBAR (3 ICON) ---
   Widget buildBottomNavbar() {
     return Container(
       height: 80,
       decoration: const BoxDecoration(
-        color: Color(0xFFFCEEE4), 
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(35), topRight: Radius.circular(35))
+        color: Color(0xFFFCEEE4),
+        borderRadius: BorderRadius.only(
+          topLeft: Radius.circular(35),
+          topRight: Radius.circular(35),
+        ),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           IconButton(
-            icon: Icon(_selectedIndex == 2 ? Icons.favorite : Icons.favorite_border, size: 30, color: _selectedIndex == 2 ? Colors.pink : const Color(0xFF4F3A38)), 
-            onPressed: () => setState(() => _selectedIndex = 2)
+            icon: Icon(
+              _selectedIndex == 2 ? Icons.favorite : Icons.favorite_border,
+              size: 30,
+              color: _selectedIndex == 2 ? Colors.pink : const Color(0xFF4F3A38),
+            ),
+            onPressed: () => setState(() => _selectedIndex = 2),
           ),
           IconButton(
-            icon: const Icon(Icons.add_circle, size: 50, color: Color(0xFFFF4081)), 
+            icon: const Icon(Icons.add_circle, size: 50, color: Color(0xFFFF4081)),
             onPressed: () async {
               final result = await Navigator.push(
                 context,
                 MaterialPageRoute(builder: (_) => const TambahResep()),
               );
               if (result != null && result is Recipe) {
-                result.owner = userName;
-                result.isPrivate = false;
-                result.isPublic = true;
+                result.userId = userId;
+                result.owner = userProfile?.username ?? 'User';
                 setState(() {
                   recipeList.add(result);
                 });
-                await _saveAllData();
               }
-            }
+            },
           ),
           IconButton(
-            icon: Icon(Icons.home_outlined, size: 30, color: _selectedIndex == 0 ? Colors.pink : const Color(0xFF4F3A38)), 
-            onPressed: _backToHome
+            icon: Icon(
+              Icons.home_outlined,
+              size: 30,
+              color: _selectedIndex == 0 ? Colors.pink : const Color(0xFF4F3A38),
+            ),
+            onPressed: _backToHome,
           ),
         ],
       ),
     );
   }
 
-  // --- CARD RESEP ---
   Widget resepCard(Recipe recipe, int index) {
-    bool isFavorited = favoritedIndices.contains(index);
+    bool isFavorited = favoriteRecipesList.any((r) => r.id == recipe.id);
+
     return GestureDetector(
       onTap: () => _showRecipeDetail(recipe),
       child: Container(
-        decoration: BoxDecoration(color: const Color(0xFFFCEEE4), borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFCEEE4),
+          borderRadius: BorderRadius.circular(20),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -525,9 +529,9 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
                   Container(
                     decoration: BoxDecoration(
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                      image: recipe.imagePath != null
+                      image: recipe.imageUrl != null
                           ? DecorationImage(
-                              image: getImageProvider(recipe.imagePath!),
+                              image: NetworkImage(recipe.imageUrl!),
                               fit: BoxFit.cover,
                             )
                           : null,
@@ -554,7 +558,7 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
                         ),
                       ),
                     ),
-                  if (recipe.isPublic && recipe.ratings.isNotEmpty)
+                  if (recipe.ratings.isNotEmpty)
                     Positioned(
                       bottom: 10,
                       left: 10,
@@ -599,18 +603,31 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
                         ),
                       ),
                       GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            if (isFavorited) {
-                              favoritedIndices.remove(index);
-                            } else {
-                              favoritedIndices.add(index);
-                              notificationList.add("Resep ${recipe.name} berhasil ditambahkan ke favorit!");
-                            }
-                          });
-                          _saveAllData();
+                        onTap: () async {
+                          try {
+                            await favoriteService.toggleFavorite(
+                              userId: userId!,
+                              recipeId: recipe.id,
+                            );
+                            setState(() {
+                              if (isFavorited) {
+                                favoriteRecipesList.removeWhere((r) => r.id == recipe.id);
+                              } else {
+                                favoriteRecipesList.add(recipe);
+                                notificationList.add("Resep ${recipe.name} ditambahkan ke favorit!");
+                              }
+                            });
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Error: $e')),
+                            );
+                          }
                         },
-                        child: Icon(isFavorited ? Icons.favorite : Icons.favorite_border, color: Colors.pink, size: 20),
+                        child: Icon(
+                          isFavorited ? Icons.favorite : Icons.favorite_border,
+                          color: Colors.pink,
+                          size: 20,
+                        ),
                       )
                     ],
                   ),
@@ -640,34 +657,66 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
   }
 
   Widget buildFavoritePage() {
-    List<Recipe> favoriteRecipes = favoritedIndices.map((i) => recipeList[i]).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
           padding: const EdgeInsets.all(15),
-          child: Row(children: [IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: _backToHome), const Text("Favoritku", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold))]),
+          child: Row(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new),
+                onPressed: _backToHome,
+              ),
+              const Text("Favoritku", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+            ],
+          ),
         ),
-        Expanded(child: favoriteRecipes.isEmpty ? const Center(child: Text("Belum ada favorit.")) : buildGrid(favoriteRecipes, isFavoritePage: true)),
+        Expanded(
+          child: favoriteRecipesList.isEmpty
+              ? const Center(child: Text("Belum ada favorit."))
+              : buildGrid(favoriteRecipesList, isFavoritePage: true),
+        ),
       ],
     );
   }
 
-  // --- HALAMAN PROFIL (DENGAN LOGOUT) ---
   Widget buildProfilePage() {
     return SingleChildScrollView(
       child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
-            child: Row(children: [IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: _backToHome), const Text("Profil Saya", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold))]),
+            child: Row(
+              children: [
+                IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: _backToHome),
+                const Text("Profil Saya", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+              ],
+            ),
           ),
-          const CircleAvatar(radius: 70, backgroundColor: Color(0xFFFCEEE4), child: Icon(Icons.person, size: 80, color: Color(0xFFD9ACA3))),
+          CircleAvatar(
+            radius: 70,
+            backgroundColor: const Color(0xFFFCEEE4),
+            backgroundImage: userProfile?.avatarUrl != null
+                ? NetworkImage(userProfile!.avatarUrl!)
+                : null,
+            child: userProfile?.avatarUrl == null
+                ? const Icon(Icons.person, size: 80, color: Color(0xFFD9ACA3))
+                : null,
+          ),
           const SizedBox(height: 15),
-          Text(userName, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          Text(
+            userProfile?.username ?? 'User',
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 30),
-          buildEditField("Edit Profil :", "Masukkan nama baru...", _nameEditController, Icons.edit_note),
-          buildEditField("Ubah Kata Sandi :", "Masukkan sandi baru...", _passEditController, Icons.lock_outline),
+          buildEditField(
+            "Edit Nama :",
+            "Masukkan nama baru...",
+            _nameEditController,
+            Icons.edit_note,
+          ),
+          const SizedBox(height: 20),
           SizedBox(
             width: 200,
             child: OutlinedButton.icon(
@@ -677,7 +726,7 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
                   MaterialPageRoute(
                     builder: (_) => PrivateRecipesPage(
                       recipes: recipeList,
-                      username: userName,
+                      username: userProfile?.username ?? 'User',
                     ),
                   ),
                 );
@@ -687,34 +736,48 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
             ),
           ),
           const SizedBox(height: 20),
-          const SizedBox(height: 30),
-          
-          // TOMBOL SIMPAN
           ElevatedButton(
-            onPressed: () {
-              setState(() {
-                if (_nameEditController.text.isNotEmpty) userName = _nameEditController.text;
-                if (_passEditController.text.isNotEmpty) userPassword = _passEditController.text;
-              });
-              _saveAllData();
-              _nameEditController.clear();
-              _passEditController.clear();
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Profil disimpan!")));
+            onPressed: () async {
+              try {
+                if (_nameEditController.text.isNotEmpty) {
+                  await userService.updateUserProfile(
+                    userId: userId!,
+                    username: _nameEditController.text,
+                  );
+                  setState(() {
+                    if (userProfile != null) {
+                      userProfile = userProfile!.copyWith(
+                        username: _nameEditController.text,
+                      );
+                    }
+                  });
+                }
+                _nameEditController.clear();
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Profil disimpan!")),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Error: $e')),
+                );
+              }
             },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4F3A38), minimumSize: const Size(200, 45)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4F3A38),
+              minimumSize: const Size(200, 45),
+            ),
             child: const Text("Simpan Perubahan", style: TextStyle(color: Colors.white)),
           ),
-
           const SizedBox(height: 15),
-
-          // TOMBOL LOGOUT
           OutlinedButton.icon(
-            onPressed: () {
-              _logout();
-            },
+            onPressed: _logout,
             icon: const Icon(Icons.logout, color: Colors.red),
             label: const Text("Keluar Akun", style: TextStyle(color: Colors.red)),
-            style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.red), minimumSize: const Size(200, 45)),
+            style: OutlinedButton.styleFrom(
+              side: const BorderSide(color: Colors.red),
+              minimumSize: const Size(200, 45),
+            ),
           ),
           const SizedBox(height: 30),
         ],
@@ -726,60 +789,85 @@ Navigator.pushAndRemoveUntil( context, MaterialPageRoute(builder: (context) => c
     return GridView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 15),
       itemCount: list.length,
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 2, childAspectRatio: 0.8, crossAxisSpacing: 15, mainAxisSpacing: 15),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        childAspectRatio: 0.8,
+        crossAxisSpacing: 15,
+        mainAxisSpacing: 15,
+      ),
       itemBuilder: (context, index) {
-        int originalIndex = isFavoritePage ? recipeList.indexOf(list[index]) : index;
-        return resepCard(list[index], originalIndex);
+        return resepCard(list[index], index);
       },
     );
   }
 
-  Widget buildEditField(String label, String hint, TextEditingController controller, IconData icon) {
+  Widget buildEditField(
+    String label,
+    String hint,
+    TextEditingController controller,
+    IconData icon,
+  ) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
       padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: const Color(0xFFFCEEE4), borderRadius: BorderRadius.circular(15)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFCEEE4),
+        borderRadius: BorderRadius.circular(15),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [Icon(icon, size: 20, color: const Color(0xFF4F3A38)), const SizedBox(width: 10), Text(label, style: const TextStyle(fontWeight: FontWeight.bold))]),
-          TextField(controller: controller, decoration: InputDecoration(hintText: hint, border: InputBorder.none)),
+          Row(
+            children: [
+              Icon(icon, size: 20, color: const Color(0xFF4F3A38)),
+              const SizedBox(width: 10),
+              Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          TextField(
+            controller: controller,
+            decoration: InputDecoration(hintText: hint, border: InputBorder.none),
+          ),
         ],
       ),
     );
   }
 
-
-  //Fitur Filter kategori
   Widget _filterItem(String name, String emoji) {
-  bool isSelected = selectedCategory == name;
-  return GestureDetector(
-    onTap: () {
-      setState(() {
-        selectedCategory = name; // Update kategori saat diklik
-      });
-    },
-    child: Container(
-      margin: const EdgeInsets.only(right: 10), // Jarak antar tombol
-      padding: const EdgeInsets.symmetric(horizontal: 15),
-      decoration: BoxDecoration(
-        color: isSelected ? const Color(0xFFFF4081) : const Color(0xFFFCEEE4),
-        borderRadius: BorderRadius.circular(20),
-      ),
-      child: Row(
-        children: [
-          Text(emoji, style: const TextStyle(fontSize: 16)),
-          const SizedBox(width: 5),
-          Text(
-            name,
-            style: TextStyle(
-              color: isSelected ? Colors.white : const Color(0xFF4F3A38),
-              fontWeight: FontWeight.bold,
+    bool isSelected = selectedCategory == name;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          selectedCategory = name;
+        });
+      },
+      child: Container(
+        margin: const EdgeInsets.only(right: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 15),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFFFF4081) : const Color(0xFFFCEEE4),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            Text(emoji, style: const TextStyle(fontSize: 16)),
+            const SizedBox(width: 5),
+            Text(
+              name,
+              style: TextStyle(
+                color: isSelected ? Colors.white : const Color(0xFF4F3A38),
+                fontWeight: FontWeight.bold,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
+
+  @override
+  void dispose() {
+    _nameEditController.dispose();
+    super.dispose();
+  }
 }

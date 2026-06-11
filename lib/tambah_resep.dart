@@ -3,7 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/recipe_model.dart';
+import '../services/recipe_service.dart';
+import '../services/storage_service.dart';
 
 class TambahResep extends StatefulWidget {
   final Recipe? recipe;
@@ -18,9 +21,8 @@ class _TambahResepState extends State<TambahResep> {
   final TextEditingController _descController = TextEditingController();
   final TextEditingController _stepsController = TextEditingController();
 
-  // --- Fitur Baru: State Kategori & Publikasi ---
   String? _selectedCategory;
-  bool _isPublic = true; // Default ke Public
+  bool _isPublic = true;
   final List<String> _categories = [
     'Sarapan',
     'Makan Siang',
@@ -31,11 +33,20 @@ class _TambahResepState extends State<TambahResep> {
 
   XFile? _pickedImage;
   bool _isPickingImage = false;
+  bool _isSubmitting = false;
   final ImagePicker _picker = ImagePicker();
+
+  late RecipeService recipeService;
+  late StorageService storageService;
+  String? userId;
 
   @override
   void initState() {
     super.initState();
+    recipeService = RecipeService();
+    storageService = StorageService();
+    userId = Supabase.instance.client.auth.currentUser?.id;
+
     if (widget.recipe != null) {
       _nameController.text = widget.recipe!.name;
       _descController.text = widget.recipe!.description;
@@ -45,7 +56,6 @@ class _TambahResepState extends State<TambahResep> {
     }
   }
 
-  // ... (Fungsi _pickImage dan _showErrorSnackBar tetap sama)
   Future<void> _pickImage() async {
     try {
       if (!kIsWeb) {
@@ -80,6 +90,16 @@ class _TambahResepState extends State<TambahResep> {
     );
   }
 
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -94,7 +114,10 @@ class _TambahResepState extends State<TambahResep> {
         title: const Text(
           'Tambah Resep Baru',
           style: TextStyle(
-              fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF4F3A38)),
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Color(0xFF4F3A38),
+          ),
         ),
       ),
       body: SingleChildScrollView(
@@ -103,12 +126,11 @@ class _TambahResepState extends State<TambahResep> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // 1. Image Section (Tetap sama)
               Center(
                 child: Column(
                   children: [
                     GestureDetector(
-                      onTap: _isPickingImage ? null : _pickImage,
+                      onTap: _isPickingImage || _isSubmitting ? null : _pickImage,
                       child: Container(
                         width: 160,
                         height: 160,
@@ -117,68 +139,67 @@ class _TambahResepState extends State<TambahResep> {
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
-                                blurRadius: 8,
-                                offset: const Offset(0, 4)),
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
                           ],
                         ),
                         child: _isPickingImage
                             ? const Center(
                                 child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white)))
+                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                ),
+                              )
                             : _pickedImage != null
                                 ? ClipOval(
                                     child: kIsWeb
-                                        ? Image.network(_pickedImage!.path,
-                                            fit: BoxFit.cover)
-                                        : Image.file(File(_pickedImage!.path),
-                                            fit: BoxFit.cover),
+                                        ? Image.network(_pickedImage!.path, fit: BoxFit.cover)
+                                        : Image.file(File(_pickedImage!.path), fit: BoxFit.cover),
                                   )
-                                : (widget.recipe?.imagePath != null
+                                : (widget.recipe?.imageUrl != null
                                     ? ClipOval(
-                                        child: Image.file(
-                                            File(widget.recipe!.imagePath!),
-                                            fit: BoxFit.cover))
+                                        child: Image.network(widget.recipe!.imageUrl!, fit: BoxFit.cover),
+                                      )
                                     : const Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
+                                        mainAxisAlignment: MainAxisAlignment.center,
                                         children: [
-                                          Icon(Icons.add_a_photo,
-                                              size: 60, color: Colors.white),
+                                          Icon(Icons.add_a_photo, size: 60, color: Colors.white),
                                           SizedBox(height: 5),
-                                          Text('Tap Upload',
-                                              style: TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 12,
-                                                  fontWeight: FontWeight.w500)),
+                                          Text(
+                                            'Tap Upload',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
                                         ],
                                       )),
                       ),
                     ),
                     const SizedBox(height: 15),
-                    const Text('Unggah Foto Makananmu',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF4F3A38),
-                            fontSize: 16)),
+                    const Text(
+                      'Unggah Foto Makananmu',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF4F3A38),
+                        fontSize: 16,
+                      ),
+                    ),
                   ],
                 ),
               ),
               const SizedBox(height: 35),
-
-              // 2. Form Nama Resep (Tetap sama)
               _buildFormCard(
                 label: 'Nama Resep',
                 child: TextField(
                   controller: _nameController,
-                  decoration: _buildInputDecoration(
-                      'Masukkan nama resep...', Icons.restaurant),
+                  enabled: !_isSubmitting,
+                  decoration: _buildInputDecoration('Masukkan nama resep...', Icons.restaurant),
                 ),
               ),
               const SizedBox(height: 20),
-
-              // --- FITUR BARU: DROPDOWN KATEGORI ---
               _buildFormCard(
                 label: 'Pilih Kategori',
                 child: DropdownButtonFormField<String>(
@@ -189,62 +210,84 @@ class _TambahResepState extends State<TambahResep> {
                       child: Text(category),
                     );
                   }).toList(),
-                  onChanged: (value) => setState(() => _selectedCategory = value),
-                  decoration: _buildInputDecoration(
-                      'Pilih kategori hidangan', Icons.category),
+                  onChanged: _isSubmitting ? null : (value) => setState(() => _selectedCategory = value),
+                  decoration: _buildInputDecoration('Pilih kategori hidangan', Icons.category),
                   dropdownColor: const Color(0xFFF5EFEB),
                 ),
               ),
               const SizedBox(height: 20),
-
-              // 2. Ingredients Section
               _buildFormCard(
                 label: 'Bahan-Bahan',
                 child: TextField(
                   controller: _descController,
+                  enabled: !_isSubmitting,
                   maxLines: 5,
-                  decoration: _buildInputDecoration(
-                      'Tuliskan semua bahan...', Icons.list_alt),
+                  decoration: _buildInputDecoration('Tuliskan semua bahan...', Icons.list_alt),
                 ),
               ),
               const SizedBox(height: 20),
-
-              // 4. Cooking Steps Section
               _buildFormCard(
                 label: 'Langkah-Langkah Memasak',
                 child: TextField(
                   controller: _stepsController,
+                  enabled: !_isSubmitting,
                   maxLines: 5,
-                  decoration: _buildInputDecoration(
-                      'Tuliskan detail langkah...', Icons.format_list_numbered),
+                  decoration: _buildInputDecoration('Tuliskan detail langkah...', Icons.format_list_numbered),
+                ),
+              ),
+              const SizedBox(height: 20),
+              _buildFormCard(
+                label: 'Publikasi',
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        _isPublic ? 'Resep akan terlihat oleh semua' : 'Resep hanya untuk Anda',
+                        style: const TextStyle(color: Color(0xFF4F3A38)),
+                      ),
+                    ),
+                    Switch(
+                      value: _isPublic,
+                      onChanged: _isSubmitting ? null : (value) => setState(() => _isPublic = value),
+                      activeColor: const Color(0xFFFF4081),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 35),
-
-              // 5. Submit Button
               SizedBox(
                 width: double.infinity,
                 height: 60,
                 child: ElevatedButton(
-                  onPressed: _submitData,
+                  onPressed: _isSubmitting ? null : _submitData,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFF8E9DA),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                     elevation: 2,
                   ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.add_circle_outline, color: Color(0xFF4F3A38)),
-                      SizedBox(width: 10),
-                      Text('Tambahkan Resep',
-                          style: TextStyle(
-                              color: Color(0xFF4F3A38),
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold)),
-                    ],
-                  ),
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF4F3A38)),
+                          ),
+                        )
+                      : const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.add_circle_outline, color: Color(0xFF4F3A38)),
+                            SizedBox(width: 10),
+                            Text(
+                              'Tambahkan Resep',
+                              style: TextStyle(
+                                color: Color(0xFF4F3A38),
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
               ),
               const SizedBox(height: 30),
@@ -254,8 +297,6 @@ class _TambahResepState extends State<TambahResep> {
       ),
     );
   }
-
-  // --- Widget Helper untuk Scannability ---
 
   Widget _buildFormCard({required String label, required Widget child}) {
     return Card(
@@ -267,11 +308,14 @@ class _TambahResepState extends State<TambahResep> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label,
-                style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF4F3A38))),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF4F3A38),
+              ),
+            ),
             const SizedBox(height: 10),
             child,
           ],
@@ -288,12 +332,14 @@ class _TambahResepState extends State<TambahResep> {
       fillColor: const Color(0xFFF5EFEB),
       prefixIcon: Icon(icon, color: const Color(0xFFD9ACA3)),
       border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
+      ),
       contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
     );
   }
 
-  void _submitData() {
+  Future<void> _submitData() async {
     if (_nameController.text.isEmpty ||
         _selectedCategory == null ||
         _descController.text.isEmpty ||
@@ -302,27 +348,100 @@ class _TambahResepState extends State<TambahResep> {
       return;
     }
 
-    String? imagePath = _pickedImage?.path ?? widget.recipe?.imagePath;
+    if (userId == null) {
+      _showErrorSnackBar('User tidak terautentikasi');
+      return;
+    }
 
-    String recipeId = widget.recipe?.id ?? _generateRecipeId();
+    setState(() => _isSubmitting = true);
 
-    final newRecipe = Recipe(
-      id: recipeId,
-      name: _nameController.text,
-      imagePath: imagePath,
-      description: _descController.text,
-      steps: _stepsController.text,
-      category: _selectedCategory!,
-      isPublic: _isPublic,
-      comments: widget.recipe?.comments ?? [],
-      ratings: widget.recipe?.ratings ?? [],
-    );
-    Navigator.pop(context, newRecipe);
+    try {
+      String? imageUrl;
+
+      // Upload image jika ada
+      if (_pickedImage != null) {
+        final tempRecipeId = widget.recipe?.id ?? _generateRecipeId();
+
+        if (kIsWeb) {
+          final bytes = await _pickedImage!.readAsBytes();
+          imageUrl = await storageService.uploadRecipeImage(
+            recipeId: tempRecipeId,
+            imageFile: bytes,
+          );
+        } else {
+          final file = File(_pickedImage!.path);
+          imageUrl = await storageService.uploadRecipeImage(
+            recipeId: tempRecipeId,
+            imageFile: file,
+          );
+        }
+
+        if (imageUrl == null) {
+          throw Exception('Gagal upload gambar');
+        }
+      }
+
+      // Create atau update recipe di database
+      if (widget.recipe != null) {
+        // Update existing
+        await recipeService.updateRecipe(
+          recipeId: widget.recipe!.id,
+          title: _nameController.text,
+          description: _descController.text,
+          steps: _stepsController.text,
+          category: _selectedCategory!,
+          imageUrl: imageUrl,
+          isPublic: _isPublic,
+        );
+        _showSuccessSnackBar('Resep berhasil diperbarui!');
+      } else {
+        // Create new
+        final recipeId = await recipeService.createRecipe(
+          userId: userId!,
+          title: _nameController.text,
+          description: _descController.text,
+          steps: _stepsController.text,
+          category: _selectedCategory!,
+          imageUrl: imageUrl,
+          isPublic: _isPublic,
+        );
+
+        final newRecipe = Recipe(
+          id: recipeId,
+          name: _nameController.text,
+          imageUrl: imageUrl,
+          description: _descController.text,
+          steps: _stepsController.text,
+          category: _selectedCategory!,
+          isPublic: _isPublic,
+        );
+
+        if (!mounted) return;
+        Navigator.pop(context, newRecipe);
+        return;
+      }
+
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      _showErrorSnackBar('Error: $e');
+      print('Submit error: $e');
+    } finally {
+      setState(() => _isSubmitting = false);
+    }
   }
 
   String _generateRecipeId() {
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final random = (DateTime.now().microsecond % 10000).toString().padLeft(4, '0');
     return 'recipe_${timestamp}_$random';
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descController.dispose();
+    _stepsController.dispose();
+    super.dispose();
   }
 }
