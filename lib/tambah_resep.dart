@@ -393,6 +393,21 @@ class _TambahResepState extends State<TambahResep> {
           imageUrl: imageUrl,
           isPublic: _isPublic,
         );
+        final updatedRecipe = Recipe(
+        id: widget.recipe!.id, // tetap pakai ID lama
+        userId: widget.recipe!.userId,
+        name: _nameController.text,       // Ambil dari controller form Anda
+        category: _selectedCategory!,
+        description: _descController.text,
+        steps: _stepsController.text,
+        imageUrl: imageUrl ?? widget.recipe!.imageUrl, // atau variabel penampung gambar Anda
+        owner: widget.recipe!.owner,
+      );
+
+      // 2. Kembalikan objek updatedRecipe ini ke halaman detail
+      if (!mounted) return;
+      Navigator.pop(context, updatedRecipe);
+        
         _showSuccessSnackBar('Resep berhasil diperbarui!');
       } else {
         // Create new
@@ -420,7 +435,6 @@ class _TambahResepState extends State<TambahResep> {
         Navigator.pop(context, newRecipe);
         return;
       }
-
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {

@@ -109,25 +109,52 @@ class _DashboardState extends State<Dashboard> {
     }
   }
 
-  void _showRecipeDetail(Recipe recipe) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => RecipeDetailPage(
-          recipe: recipe,
-          userName: userProfile?.username ?? 'User',
-          onRecipeUpdated: (updatedRecipe) {
-            setState(() {
-              int idx = recipeList.indexWhere((r) => r.id == updatedRecipe.id);
-              if (idx != -1) {
-                recipeList[idx] = updatedRecipe;
-              }
-            });
-          },
-        ),
+  // void _showRecipeDetail(Recipe recipe) {
+  //   Navigator.push(
+  //     context,
+  //     MaterialPageRoute(
+  //       builder: (_) => RecipeDetailPage(
+  //         recipe: recipe,
+  //         userName: userProfile?.username ?? 'User',
+  //         onRecipeUpdated: (updatedRecipe) {
+  //           setState(() {
+  //             int idx = recipeList.indexWhere((r) => r.id == updatedRecipe.id);
+  //             if (idx != -1) {
+  //               recipeList[idx] = updatedRecipe;
+  //             }
+  //           });
+  //         },
+  //       ),
+  //     ),
+  //   );
+  // }
+  void _showRecipeDetail(Recipe recipe) async {
+  final result = await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => RecipeDetailPage(
+        recipe: recipe,
+        userName: userProfile?.username ?? 'User',
+        onRecipeUpdated: (updatedRecipe) {
+          setState(() {
+            int idx = recipeList.indexWhere((r) => r.id == updatedRecipe.id);
+            if (idx != -1) {
+              recipeList[idx] = updatedRecipe;
+            }
+          });
+        },
       ),
-    );
+    ),
+  );
+
+  // Jika result adalah "deleted", hapus dari list
+  if (result == "deleted") {
+    setState(() {
+      recipeList.removeWhere((r) => r.id == recipe.id);
+      favoriteRecipesList.removeWhere((r) => r.id == recipe.id);
+    });
   }
+}
 
   @override
   Widget build(BuildContext context) {

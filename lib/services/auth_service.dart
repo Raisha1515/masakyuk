@@ -93,4 +93,44 @@ class AuthService {
   String? getCurrentUserEmail() {
     return supabase.auth.currentUser?.email;
   }
+
+  // 1. Mengirimkan kode OTP real ke email user
+  Future<void> sendPasswordResetOtp(String email) async {
+    try {
+      await supabase.auth.resetPasswordForEmail(
+        email,
+        // Alur ini otomatis mengirimkan email berisi kode OTP 6-digit default dari Supabase
+      );
+      print('OTP reset password berhasil dikirim ke $email');
+    } catch (e) {
+      print('Error sending reset OTP: $e');
+      rethrow;
+    }
+  }
+
+  // 2. Memverifikasi OTP dan memperbarui password baru
+  Future<void> verifyOtpAndResetPassword({
+    required String email,
+    required String token,
+    required String newPassword,
+  }) async {
+    try {
+      // Verifikasi token/OTP yang dimasukkan user
+      await supabase.auth.verifyOTP(
+        email: email,
+        token: token,
+        type: OtpType.recovery,
+      );
+
+      // Jika OTP valid, session otomatis terbuka sementara untuk memperbarui password
+      await supabase.auth.updateUser(
+        UserAttributes(password: newPassword),
+      );
+      print('Password berhasil diubah');
+    } catch (e) {
+      print('Error resetting password: $e');
+      rethrow;
+    }
+  }
 }
+

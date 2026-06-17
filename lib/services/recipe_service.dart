@@ -178,14 +178,10 @@ class RecipeService {
   }
 
   Stream<List<Recipe>> subscribeToPublicRecipes() async* {
-    // Real-time subscription removed - use pull-to-refresh or periodic fetch instead
-    // For now, yield empty stream
     yield await getPublicRecipes();
   }
 
   Stream<Recipe?> subscribeToRecipe(String recipeId) async* {
-    // Real-time subscription removed - use pull-to-refresh or periodic fetch instead
-    // For now, yield single item
     yield await getRecipeById(recipeId);
   }
 
@@ -270,4 +266,5 @@ class RecipeService {
       userId: json['user_id'] as String,
     );
   }
+  
 }
