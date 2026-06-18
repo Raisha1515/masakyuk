@@ -74,7 +74,7 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> {
       try {
         await _recipeService.deleteRecipe(recipe.id);
         if (!mounted) return;
-        Navigator.pop(context, "deleted"); // Mengirim info hapus ke dashboard
+        Navigator.pop(context, "deleted");
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Resep berhasil dihapus")));
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Gagal menghapus: $e")));
@@ -162,18 +162,16 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> {
           IconButton(
             icon: const Icon(Icons.edit, color: Colors.white),
             onPressed: () async {
-              // Menunggu data resep baru hasil edit dari halaman TambahResep
               final updatedData = await Navigator.push<Recipe>(
                 context, 
                 MaterialPageRoute(builder: (_) => TambahResep(recipe: recipe))
               );
               
-              // Jika data resep baru berhasil dikembalikan, update state client side
               if (updatedData != null) {
                 setState(() {
                   recipe = updatedData;
                 });
-                widget.onRecipeUpdated(updatedData); // Memicu update data di halaman Dashboard
+                widget.onRecipeUpdated(updatedData);
               }
             },
           ),
@@ -240,10 +238,27 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> {
                   children: [
                     Text(recipe.name, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF4F3A38))),
                     const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(color: const Color(0xFFFF4081), borderRadius: BorderRadius.circular(20)),
-                      child: Text(recipe.category, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(color: const Color(0xFFFF4081), borderRadius: BorderRadius.circular(20)),
+                          child: Text(recipe.category, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 10),
+                        if (recipe.isPublic == false || recipe.isPrivate == true)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(20)),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.lock, color: Colors.white, size: 12),
+                                SizedBox(width: 4),
+                                Text('Privat', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                              ],
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
@@ -251,7 +266,7 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> {
               if (averageRating > 0)
                 Container(
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: Colors.amber.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
+                  decoration: BoxDecoration(color: Colors.amber.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
                   child: Column(
                     children: [
                       const Text('⭐', style: TextStyle(fontSize: 24)),

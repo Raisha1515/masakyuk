@@ -109,6 +109,19 @@ class _DashboardState extends State<Dashboard> {
     }
   }
 
+  Future<void> _loadRecipes() async {
+    try {
+      // Mengambil seluruh resep (baik publik maupun privat) dari database
+      final recipes = await recipeService.getPublicRecipes(); 
+      if (mounted) {
+        setState(() {
+          recipeList = recipes;
+        });
+      }
+    } catch (e) {
+      print('Error loading recipes: $e');
+    }
+  }
   // void _showRecipeDetail(Recipe recipe) {
   //   Navigator.push(
   //     context,
@@ -754,6 +767,14 @@ class _DashboardState extends State<Dashboard> {
                     builder: (_) => PrivateRecipesPage(
                       recipes: recipeList,
                       username: userProfile?.username ?? 'User',
+                      onRecipeUpdated: (updatedRecipe) {
+                      // Ketika resep diperbarui di halaman detail, load ulang resep di dashboard
+                    _loadRecipes(); 
+                  },
+                  onRecipeDeleted: (deletedId) {
+                    // Ketika resep dihapus, load ulang resep di dashboard
+                    _loadRecipes();
+                  },
                     ),
                   ),
                 );
