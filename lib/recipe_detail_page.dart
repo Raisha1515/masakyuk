@@ -278,7 +278,7 @@ class _RecipeDetailPageState extends State<RecipeDetailPage> {
             ],
           ),
           const SizedBox(height: 20),
-          _buildInfoTile('👨‍🍳 Chef', recipe.owner ?? 'Unknown'),
+          _buildInfoTile('👨‍🍳 Chef :', recipe.owner ?? 'Unknown'),
           const SizedBox(height: 12),
           const Divider(),
           const SizedBox(height: 12),

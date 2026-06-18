@@ -34,6 +34,19 @@ class RecipeService {
     }
   }
 
+  Future<List<Map<String, dynamic>>> getTrendingRecipes() async {
+    try {
+      // Memanggil database view yang telah kita buat di Supabase
+      final response = await supabase
+          .from('trending_recipes')
+          .select();
+          
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('Error fetching trending recipes: $e');
+      return [];
+    }
+  }
   Future<List<Recipe>> getUserRecipes(String userId) async {
     try {
       final data = await supabase

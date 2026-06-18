@@ -30,6 +30,7 @@ class _DashboardState extends State<Dashboard> {
   List<Recipe> recipeList = [];
   List<Recipe> favoriteRecipesList = [];
   List<String> notificationList = [];
+  List<Map<String, dynamic>> realtimeTrendingList = [];
   int _selectedIndex = 0;
   String selectedCategory = "Semua";
 
@@ -169,25 +170,103 @@ class _DashboardState extends State<Dashboard> {
   }
 }
 
-  @override
-  Widget build(BuildContext context) {
-    Widget bodyContent;
-    if (isLoading) {
-      bodyContent = const Center(child: CircularProgressIndicator());
-    } else if (_selectedIndex == 3) {
-      bodyContent = buildProfilePage();
-    } else if (_selectedIndex == 2) {
-      bodyContent = buildFavoritePage();
-    } else if (_selectedIndex == 1) {
-      bodyContent = buildNotificationPage();
-    } else {
-      bodyContent = buildHomePage();
-    }
+  // @override
+  // Widget build(BuildContext context) {
+  //   Widget bodyContent;
+  //   if (isLoading) {
+  //     bodyContent = const Center(child: CircularProgressIndicator());
+  //   } else if (_selectedIndex == 3) {
+  //     bodyContent = buildProfilePage();
+  //   } else if (_selectedIndex == 2) {
+  //     bodyContent = buildFavoritePage();
+  //   } else if (_selectedIndex == 1) {
+  //     bodyContent = buildNotificationPage();
+  //   } else {
+  //     bodyContent = buildHomePage();
+  //   }
 
+  //   return Scaffold(
+  //     backgroundColor: const Color(0xFFD9ACA3),
+  //     body: SafeArea(child: bodyContent),
+  //     bottomNavigationBar: buildBottomNavbar(),
+  //   );
+  // }
+@override
+  Widget build(BuildContext context) {
+    
+    Widget currentBody;
+    if (_selectedIndex == 0) {
+      currentBody = buildHomePage();
+    } else if (_selectedIndex == 1) {
+      currentBody = const TrendingPage(); 
+    } else if (_selectedIndex == 2) {
+      currentBody = buildFavoritePage(); 
+    } else if (_selectedIndex == 3) {
+      currentBody = buildNotificationPage();
+    } else {
+      currentBody = buildProfilePage(); 
+    }
+    
     return Scaffold(
-      backgroundColor: const Color(0xFFD9ACA3),
-      body: SafeArea(child: bodyContent),
-      bottomNavigationBar: buildBottomNavbar(),
+      backgroundColor: const Color(0xFFFBF0EF),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator(color: Colors.pink))
+          : currentBody, 
+      
+      // === KEMBALIKAN TOMBOL TAMBAH RESEP MENGGUNAKAN FLOATING ACTION BUTTON ===
+      floatingActionButton: isLoading 
+          ? null 
+          : FloatingActionButton(
+              backgroundColor: const Color(0xFFFF4081),
+              shape: const CircleBorder(),
+              elevation: 4,
+              child: const Icon(Icons.add, size: 32, color: Colors.white),
+              onPressed: () async {
+                final result = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const TambahResep()),
+                );
+                if (result != null && result is Recipe) {
+                  result.userId = userId;
+                  result.owner = userProfile?.username ?? 'User';
+                  setState(() {
+                    recipeList.add(result);
+                  });
+                }
+              },
+            ),
+      // Posisi FAB diatur agar melayang pas di bagian tengah bawah, sedikit menjorok ke dalam navbar
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+
+      bottomNavigationBar: BottomNavigationBar(
+        // Sinkronisasi index visual navbar bawah
+        currentIndex: _selectedIndex >= 4 ? 3 : (_selectedIndex == 3 ? 0 : _selectedIndex), 
+        
+        onTap: (index) {
+          setState(() {
+            if (index == 0) _selectedIndex = 0;
+            if (index == 1) _selectedIndex = 1;
+            if (index == 2) _selectedIndex = 2;
+            if (index == 3) _selectedIndex = 4; // Menuju halaman profil asli (index 4)
+          });
+          
+          if (index == 0) _loadRecipes();
+          if (index == 2) _loadAllData();
+          if (index == 3) _loadAllData(); 
+        },
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: Colors.white,
+        selectedItemColor: const Color(0xFFFF4081),
+        unselectedItemColor: const Color(0xFF8E6F6A),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Beranda'),
+          BottomNavigationBarItem(icon: Icon(Icons.local_fire_department), label: 'Trending'),
+          // Memberi space kosong (atau item dummy) di item navbar sebenarnya tidak perlu jika kita pakai layout standar,
+          // tapi agar susunannya seimbang dengan tombol di tengah, kita pertahankan 4 item:
+          BottomNavigationBarItem(icon: Icon(Icons.bookmark), label: 'Tersimpan'),
+          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'), 
+        ],
+      ),
     );
   }
 
@@ -370,7 +449,7 @@ class _DashboardState extends State<Dashboard> {
                     children: [
                       IconButton(
                         icon: const Icon(Icons.notifications_none, size: 30, color: Color(0xFF4F3A38)),
-                        onPressed: () => setState(() => _selectedIndex = 1),
+                        onPressed: () => setState(() => _selectedIndex = 3),
                       ),
                       if (notificationList.isNotEmpty)
                         Positioned(
@@ -398,7 +477,7 @@ class _DashboardState extends State<Dashboard> {
                   ),
                   const SizedBox(width: 5),
                   GestureDetector(
-                    onTap: () => setState(() => _selectedIndex = 3),
+                    onTap: () => setState(() => _selectedIndex = 4),
                     child: Container(
                       width: 45,
                       height: 45,
