@@ -53,33 +53,58 @@ class _DashboardState extends State<Dashboard> {
   }
 
   Future<void> _loadAllData() async {
+    if (userId == null) {
+      _logout();
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    // Semua bagian diload secara paralel & independen agar error di satu bagian
+    // tidak menghentikan bagian lain (terutama trending)
+    await Future.wait([
+      _loadUserProfile(),
+      _loadRecipesData(),
+      _loadFavoritesData(),
+      _loadTrendingData(),
+    ]);
+
+    if (mounted) setState(() => isLoading = false);
+  }
+
+  Future<void> _loadUserProfile() async {
     try {
-      if (userId == null) {
-        _logout();
-        return;
-      }
-
-      setState(() => isLoading = true);
-
-      // Load user profile
-      userProfile = await userService.getCurrentUser();
-
-      // Load recipes
-      final recipes = await recipeService.getPublicRecipes();
-      setState(() => recipeList = recipes);
-
-      // Load favorites
-      final favorites = await favoriteService.getUserFavorites(userId!);
-      setState(() => favoriteRecipesList = favorites);
-
-      setState(() => isLoading = false);
+      final profile = await userService.getCurrentUser();
+      if (mounted) setState(() => userProfile = profile);
     } catch (e) {
-      print('Error loading data: $e');
-      setState(() => isLoading = false);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+      print('Error loading user profile: $e');
+    }
+  }
+
+  Future<void> _loadRecipesData() async {
+    try {
+      final recipes = await recipeService.getPublicRecipes();
+      if (mounted) setState(() => recipeList = recipes);
+    } catch (e) {
+      print('Error loading recipes: $e');
+    }
+  }
+
+  Future<void> _loadFavoritesData() async {
+    try {
+      final favorites = await favoriteService.getUserFavorites(userId!);
+      if (mounted) setState(() => favoriteRecipesList = favorites);
+    } catch (e) {
+      print('Error loading favorites: $e');
+    }
+  }
+
+  Future<void> _loadTrendingData() async {
+    try {
+      final data = await recipeService.getTrendingRecipes();
+      if (mounted) setState(() => realtimeTrendingList = data);
+    } catch (e) {
+      print('Error loading trending: $e');
     }
   }
 
@@ -324,24 +349,32 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  Widget trendingCard(
-    int index,
-    String title,
-    String image,
-    String likes,
-    String comments,
-    String status,
-  ) {
+  Widget trendingCard(int rank, Map<String, dynamic> item) {
+    final String title = item['title'] ?? 'Tanpa Judul';
+    final String? imageUrl = item['image_url'] as String?;
+    final double rating = (item['avg_rating'] as num? ?? 0).toDouble();
+    final int commentCount = (item['comment_count'] as num? ?? 0).toInt();
+    final String category = item['category'] ?? 'Umum';
+
+    // Warna rank badge: emas, perak, perunggu, sisanya pink
+    final List<Color> rankColors = [
+      const Color(0xFFFFC107), // #1 gold
+      const Color(0xFF9E9E9E), // #2 silver
+      const Color(0xFFCD7F32), // #3 bronze
+    ];
+    final Color rankColor =
+        rank <= 3 ? rankColors[rank - 1] : const Color(0xFFD88A94);
+
     return Container(
-      width: 170,
+      width: 175,
       margin: const EdgeInsets.only(right: 12),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.07),
+            blurRadius: 10,
             offset: const Offset(0, 4),
           ),
         ],
@@ -349,70 +382,113 @@ class _DashboardState extends State<Dashboard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Gambar + rank badge
           Stack(
             children: [
               ClipRRect(
                 borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(14),
-                  topRight: Radius.circular(14),
+                  topLeft: Radius.circular(16),
+                  topRight: Radius.circular(16),
                 ),
-                child: Image.asset(
-                  image,
-                  width: double.infinity,
-                  height: 100,
-                  fit: BoxFit.cover,
-                ),
+                child: imageUrl != null
+                    ? Image.network(
+                        imageUrl,
+                        width: double.infinity,
+                        height: 105,
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => Container(
+                          width: double.infinity,
+                          height: 105,
+                          color: Colors.grey[200],
+                          child: const Icon(Icons.broken_image, color: Colors.grey),
+                        ),
+                      )
+                    : Container(
+                        width: double.infinity,
+                        height: 105,
+                        color: Colors.grey[200],
+                        child: const Icon(Icons.fastfood, color: Colors.grey),
+                      ),
               ),
+              // Rank badge
               Positioned(
                 left: 8,
                 top: 8,
-                child: CircleAvatar(
-                  radius: 14,
-                  backgroundColor: Colors.orange,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: rankColor,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                   child: Text(
-                    '$index',
+                    '#$rank',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
+              // Kategori badge
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFF4081).withOpacity(0.88),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    category,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
               ),
             ],
           ),
+          // Info bawah
           Padding(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.favorite, size: 14, color: Colors.red),
-                    const SizedBox(width: 6),
-                    Text(likes, style: const TextStyle(fontSize: 12)),
-                    const SizedBox(width: 10),
-                    const Icon(Icons.chat_bubble_outline, size: 14, color: Colors.grey),
-                    const SizedBox(width: 6),
-                    Text(comments, style: const TextStyle(fontSize: 12)),
-                  ],
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: Color(0xFF4F3A38),
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 6),
                 Row(
                   children: [
-                    Icon(
-                      status == 'Naik' ? Icons.arrow_upward : Icons.remove,
-                      size: 14,
-                      color: status == 'Naik' ? Colors.green : Colors.grey,
+                    const Icon(Icons.star_rounded, size: 14, color: Colors.amber),
+                    const SizedBox(width: 3),
+                    Text(
+                      rating.toStringAsFixed(1),
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                     ),
-                    const SizedBox(width: 6),
-                    Text(status, style: const TextStyle(fontSize: 12)),
+                    const SizedBox(width: 10),
+                    const Icon(Icons.chat_bubble_outline, size: 13, color: Colors.blueGrey),
+                    const SizedBox(width: 3),
+                    Text(
+                      '$commentCount',
+                      style: const TextStyle(fontSize: 12),
+                    ),
                   ],
                 ),
               ],
             ),
-          )
+          ),
         ],
       ),
     );
@@ -556,16 +632,24 @@ class _DashboardState extends State<Dashboard> {
         ),
         const SizedBox(height: 10),
         SizedBox(
-          height: 190,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            children: [
-              trendingCard(1, 'Resep Rendang', 'assets/images/1.png', '2.4rb', '318', 'Naik'),
-              trendingCard(2, 'Nasi Goreng', 'assets/images/2.png', '1.8rb', '241', 'Naik'),
-              trendingCard(3, 'Opor Ayam', 'assets/images/1.png', '1.2rb', '190', 'Stabil'),
-            ],
-          ),
+          height: 200,
+          child: realtimeTrendingList.isEmpty
+              ? const Center(
+                  child: Text(
+                    'Belum ada data trending.',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                )
+              : ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  itemCount: realtimeTrendingList.length > 5
+                      ? 5
+                      : realtimeTrendingList.length,
+                  itemBuilder: (context, index) {
+                    return trendingCard(index + 1, realtimeTrendingList[index]);
+                  },
+                ),
         ),
         const SizedBox(height: 20),
         Expanded(
