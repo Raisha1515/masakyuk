@@ -2,11 +2,14 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:masakyuk/models/recipe_model.dart';
 import 'package:masakyuk/services/recipe_service.dart';
 import 'package:masakyuk/services/favorite_service.dart';
 import 'package:masakyuk/services/auth_service.dart';
 import 'package:masakyuk/services/user_service.dart';
+import 'package:masakyuk/services/storage_service.dart';
 import 'package:masakyuk/models/user_model.dart';
 import 'package:masakyuk/tambah_resep.dart';
 import 'package:masakyuk/login.dart';
@@ -26,6 +29,7 @@ class _DashboardState extends State<Dashboard> {
   late RecipeService recipeService;
   late FavoriteService favoriteService;
   late UserService userService;
+  late StorageService storageService;
 
   List<Recipe> recipeList = [];
   List<Recipe> favoriteRecipesList = [];
@@ -37,8 +41,11 @@ class _DashboardState extends State<Dashboard> {
   UserProfile? userProfile;
   String? userId;
   bool isLoading = true;
+  bool _isUploadingAvatar = false;
 
   final TextEditingController _nameEditController = TextEditingController();
+  final TextEditingController _bioEditController = TextEditingController();
+  final ImagePicker _avatarPicker = ImagePicker();
 
   @override
   void initState() {
@@ -47,12 +54,12 @@ class _DashboardState extends State<Dashboard> {
     recipeService = RecipeService();
     favoriteService = FavoriteService();
     userService = UserService();
+    storageService = StorageService();
 
     userId = authService.getCurrentUserId();
     _loadAllData();
   }
 
-  // Menarik seluruh data master agar terhubung realtime ke database
   Future<void> _loadAllData() async {
     if (userId == null) {
       _logout();
@@ -74,13 +81,20 @@ class _DashboardState extends State<Dashboard> {
   Future<void> _loadUserProfile() async {
     try {
       final profile = await userService.getCurrentUser();
-      if (mounted) setState(() => userProfile = profile);
+      if (mounted) {
+        setState(() {
+          userProfile = profile;
+          if (profile != null) {
+            _nameEditController.text = profile.username;
+            _bioEditController.text = profile.bio ?? '';
+          }
+        });
+      }
     } catch (e) {
       print('Error loading user profile: $e');
     }
   }
 
-  // REALTIME FIX: Mengambil data resep publik lengkap beserta relasi rating & comment langsung dari database
   Future<void> _loadRecipesData() async {
     try {
       final data = await Supabase.instance.client
@@ -95,7 +109,6 @@ class _DashboardState extends State<Dashboard> {
           .order('created_at', ascending: false);
 
       final List<Recipe> recipes = (data as List).map((item) {
-        // Mapping komentar relasi database
         final rawComments = item['comments'] as List? ?? [];
         final List<Comment> comments = rawComments.map((c) {
           final up = c['user_profiles'] as Map<String, dynamic>?;
@@ -108,7 +121,6 @@ class _DashboardState extends State<Dashboard> {
           );
         }).toList();
 
-        // Mapping rating relasi database
         final rawRatings = item['ratings'] as List? ?? [];
         final List<Rating> ratings = rawRatings.map((r) {
           return Rating(
@@ -159,6 +171,67 @@ class _DashboardState extends State<Dashboard> {
     }
   }
 
+  Future<void> _changeAvatar() async {
+    PermissionStatus status = await Permission.photos.status;
+    if (status.isDenied) {
+      status = await Permission.photos.request();
+    }
+    if (status.isDenied && Platform.isAndroid) {
+      status = await Permission.storage.request();
+    }
+
+    if (status.isGranted || status.isLimited) {
+      try {
+        final XFile? pickedFile = await _avatarPicker.pickImage(
+          source: ImageSource.gallery,
+          imageQuality: 65,
+        );
+
+        if (pickedFile == null) return;
+
+        setState(() => _isUploadingAvatar = true);
+
+        final file = File(pickedFile.path);
+        final fileExtension = pickedFile.name.split('.').last;
+        // Penamaan file dibuat unik menggunakan waktu saat ini
+        final String fileName = 'avatar_${userId}_${DateTime.now().millisecondsSinceEpoch}.$fileExtension';
+        
+        await Supabase.instance.client.storage.from('avatars').upload(
+              fileName,
+              file,
+              fileOptions: const FileOptions(cacheControl: '3600', upsert: true),
+            );
+
+        final String publicUrl = Supabase.instance.client.storage.from('avatars').getPublicUrl(fileName);
+
+        await Supabase.instance.client
+            .from('user_profiles')
+            .update({'avatar_url': publicUrl})
+            .eq('id', userId!);
+
+        await _loadUserProfile();
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Foto profil berhasil diperbarui!"), backgroundColor: Colors.green),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Gagal upload foto profil: $e"), backgroundColor: Colors.redAccent),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isUploadingAvatar = false);
+      }
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Izin galeri ditolak untuk mengganti foto profil."), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
   Future<void> _logout() async {
     try {
       await authService.logout();
@@ -186,7 +259,6 @@ class _DashboardState extends State<Dashboard> {
     }
   }
 
-  // Refresher Beranda pemicu reload realtime data relasi
   Future<void> _loadRecipes() async {
     await _loadRecipesData();
   }
@@ -199,7 +271,7 @@ class _DashboardState extends State<Dashboard> {
           recipe: recipe,
           userName: userProfile?.username ?? 'User',
           onRecipeUpdated: (updatedRecipe) {
-            _loadRecipesData(); // Auto reload dari DB jika ada update/comment baru di page detail
+            _loadRecipesData();
           },
         ),
       ),
@@ -539,7 +611,12 @@ class _DashboardState extends State<Dashboard> {
                         color: Color(0xFFFCEEE4),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.person, color: Color(0xFFD9ACA3)),
+                      child: userProfile?.avatarUrl != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(45),
+                              child: Image.network(userProfile!.avatarUrl!, fit: BoxFit.cover),
+                            )
+                          : const Icon(Icons.person, color: Color(0xFFD9ACA3)),
                     ),
                   ),
                 ],
@@ -659,12 +736,10 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  // HUBUNGAN REALTIME: Data stars, komen, & love terintergrasi penuh sesuai Supabase
   Widget resepCard(Recipe recipe, int index) {
     bool isFavorited = favoriteRecipesList.any((r) => r.id == recipe.id);
     final bool isOwner = recipe.userId == userId;
     
-    // Logic pembacaan data dinamis sesuai database
     final double avgRating = recipe.ratings != null && recipe.ratings.isNotEmpty 
         ? recipe.ratings.map((r) => r.stars).reduce((a, b) => a + b) / recipe.ratings.length 
         : 0.0;
@@ -778,7 +853,6 @@ class _DashboardState extends State<Dashboard> {
                         ),
                       ),
                     ),
-                  // Badge Rating Atas Realtime
                   Positioned(
                     bottom: 7,
                     left: 8,
@@ -809,7 +883,6 @@ class _DashboardState extends State<Dashboard> {
                       ),
                     ),
                   ),
-                  // Badge Komen Atas Realtime
                   Positioned(
                     bottom: 7,
                     right: 8,
@@ -860,7 +933,6 @@ class _DashboardState extends State<Dashboard> {
                         ),
                       ),
                       const SizedBox(width: 4),
-                      // Love / Favorit Toggle dengan update database
                       GestureDetector(
                         onTap: () async {
                           try {
@@ -868,7 +940,6 @@ class _DashboardState extends State<Dashboard> {
                               userId: userId!,
                               recipeId: recipe.id,
                             );
-                            // Auto Sinkron state lokal setelah toggle favorit
                             _loadFavoritesData();
                             if (!isFavorited) {
                               setState(() {
@@ -890,7 +961,6 @@ class _DashboardState extends State<Dashboard> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  // Row Bintang Indikator Bawah Realtime
                   Row(
                     children: [
                       ...List.generate(5, (i) {
@@ -991,28 +1061,49 @@ class _DashboardState extends State<Dashboard> {
             ),
           ),
           Center(
-            child: Container(
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFD9ACA3).withOpacity(0.3),
-                    blurRadius: 15,
-                    offset: const Offset(0, 6),
+            child: Stack(
+              children: [
+                Container(
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFD9ACA3).withOpacity(0.3),
+                        blurRadius: 15,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                    border: Border.all(color: Colors.white, width: 4),
                   ),
-                ],
-                border: Border.all(color: Colors.white, width: 4),
-              ),
-              child: CircleAvatar(
-                radius: 60,
-                backgroundColor: const Color(0xFFFCEEE4),
-                backgroundImage: userProfile?.avatarUrl != null
-                    ? NetworkImage(userProfile!.avatarUrl!)
-                    : null,
-                child: userProfile?.avatarUrl == null
-                    ? const Icon(Icons.person, size: 65, color: Color(0xFFD9ACA3))
-                    : null,
-              ),
+                  child: CircleAvatar(
+                    radius: 60,
+                    backgroundColor: const Color(0xFFFCEEE4),
+                    backgroundImage: userProfile?.avatarUrl != null
+                        ? NetworkImage(userProfile!.avatarUrl!)
+                        : null,
+                    child: userProfile?.avatarUrl == null && !_isUploadingAvatar
+                        ? const Icon(Icons.person, size: 65, color: Color(0xFFD9ACA3))
+                        : _isUploadingAvatar
+                            ? const CircularProgressIndicator(color: Color(0xFFFF4081))
+                            : null,
+                  ),
+                ),
+                Positioned(
+                  bottom: 0,
+                  right: 4,
+                  child: GestureDetector(
+                    onTap: _isUploadingAvatar ? null : _changeAvatar,
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFF4081),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.camera_alt_rounded, size: 18, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 14),
@@ -1024,6 +1115,19 @@ class _DashboardState extends State<Dashboard> {
               color: Color(0xFF4F3A38),
             ),
           ),
+          if (userProfile?.bio != null && userProfile!.bio!.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              userProfile!.bio!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13, 
+                color: Color(0xFFFF4081),
+                fontStyle: FontStyle.italic,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
           const SizedBox(height: 4),
           Text(
             authService.getCurrentUserEmail() ?? 'Email tidak tersedia',
@@ -1034,6 +1138,7 @@ class _DashboardState extends State<Dashboard> {
             ),
           ),
           const SizedBox(height: 30),
+          
           Align(
             alignment: Alignment.centerLeft,
             child: Padding(
@@ -1069,6 +1174,48 @@ class _DashboardState extends State<Dashboard> {
               ),
             ),
           ),
+          
+          const SizedBox(height: 20),
+
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8),
+              child: const Text(
+                "Bio Profil", 
+                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4F3A38), fontSize: 14),
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFEFE5E3)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFD9ACA3).withOpacity(0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                )
+              ]
+            ),
+            child: TextField(
+              controller: _bioEditController,
+              maxLines: 2,
+              maxLength: 80,
+              style: const TextStyle(color: Color(0xFF4F3A38), fontWeight: FontWeight.w400),
+              decoration: const InputDecoration(
+                hintText: "Tulis bio singkat atau keahlian memasakmu...",
+                hintStyle: TextStyle(color: Colors.grey, fontSize: 13),
+                border: InputBorder.none,
+                counterText: "",
+                icon: Icon(Icons.comment_bank_outlined, color: Color(0xFF8E6F6A), size: 22),
+              ),
+            ),
+          ),
+
           const SizedBox(height: 24),
           Row(
             children: [
@@ -1142,20 +1289,23 @@ class _DashboardState extends State<Dashboard> {
                     ),
                     onPressed: () async {
                       try {
-                        if (_nameEditController.text.isNotEmpty) {
-                          await userService.updateUserProfile(
-                            userId: userId!,
-                            username: _nameEditController.text,
-                          );
-                          _loadUserProfile();
-                        }
+                        await Supabase.instance.client
+                            .from('user_profiles')
+                            .update({
+                              'username': _nameEditController.text,
+                              'bio': _bioEditController.text,
+                            })
+                            .eq('id', userId!);
+
+                        await _loadUserProfile();
+                        
                         if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Profil berhasil disimpan!")),
+                          const SnackBar(content: Text("Profil berhasil disimpan!"), backgroundColor: Colors.green),
                         );
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Error: $e')),
+                          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
                         );
                       }
                     },
@@ -1164,7 +1314,7 @@ class _DashboardState extends State<Dashboard> {
               ),
             ],
           ),
-          const SizedBox(height: 60),
+          const SizedBox(height: 40),
           TextButton.icon(
             onPressed: _logout,
             icon: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20),
@@ -1234,6 +1384,7 @@ class _DashboardState extends State<Dashboard> {
   @override
   void dispose() {
     _nameEditController.dispose();
+    _bioEditController.dispose();
     super.dispose();
   }
 }
