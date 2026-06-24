@@ -52,6 +52,7 @@ class _DashboardState extends State<Dashboard> {
     _loadAllData();
   }
 
+  // Menarik seluruh data master agar terhubung realtime ke database
   Future<void> _loadAllData() async {
     if (userId == null) {
       _logout();
@@ -60,8 +61,6 @@ class _DashboardState extends State<Dashboard> {
 
     setState(() => isLoading = true);
 
-    // Semua bagian diload secara paralel & independen agar error di satu bagian
-    // tidak menghentikan bagian lain (terutama trending)
     await Future.wait([
       _loadUserProfile(),
       _loadRecipesData(),
@@ -81,12 +80,64 @@ class _DashboardState extends State<Dashboard> {
     }
   }
 
+  // REALTIME FIX: Mengambil data resep publik lengkap beserta relasi rating & comment langsung dari database
   Future<void> _loadRecipesData() async {
     try {
-      final recipes = await recipeService.getPublicRecipes();
+      final data = await Supabase.instance.client
+          .from('recipes')
+          .select('''
+            id, title, description, steps, category, image_url, is_public, is_private, user_id, created_at, updated_at,
+            user_profiles(username),
+            comments(id, text, created_at, user_id, user_profiles(username)),
+            ratings(id, stars, created_at, user_id)
+          ''')
+          .eq('is_public', true)
+          .order('created_at', ascending: false);
+
+      final List<Recipe> recipes = (data as List).map((item) {
+        // Mapping komentar relasi database
+        final rawComments = item['comments'] as List? ?? [];
+        final List<Comment> comments = rawComments.map((c) {
+          final up = c['user_profiles'] as Map<String, dynamic>?;
+          return Comment(
+            id: c['id'] as String,
+            author: up?['username'] as String? ?? 'Unknown',
+            text: c['text'] as String? ?? '',
+            timestamp: DateTime.parse(c['created_at'] as String),
+            userId: c['user_id'] as String?,
+          );
+        }).toList();
+
+        // Mapping rating relasi database
+        final rawRatings = item['ratings'] as List? ?? [];
+        final List<Rating> ratings = rawRatings.map((r) {
+          return Rating(
+            id: r['id'] as String,
+            stars: (r['stars'] as num? ?? 0).toInt(),
+            timestamp: DateTime.parse(r['created_at'] as String),
+            userId: r['user_id'] as String?,
+          );
+        }).toList();
+
+        return Recipe(
+          id: item['id'] as String,
+          name: item['title'] as String? ?? 'Tanpa Judul',
+          imageUrl: item['image_url'] as String?,
+          description: item['description'] as String? ?? '',
+          steps: item['steps'] as String? ?? '',
+          category: item['category'] as String? ?? '',
+          owner: item['user_profiles']?['username'] as String? ?? 'User',
+          userId: item['user_id'] as String?,
+          isPublic: item['is_public'] as bool? ?? true,
+          isPrivate: item['is_private'] as bool? ?? false,
+          comments: comments,
+          ratings: ratings,
+        );
+      }).toList();
+
       if (mounted) setState(() => recipeList = recipes);
     } catch (e) {
-      print('Error loading recipes: $e');
+      print('Error loading comprehensive recipes: $e');
     }
   }
 
@@ -135,90 +186,32 @@ class _DashboardState extends State<Dashboard> {
     }
   }
 
+  // Refresher Beranda pemicu reload realtime data relasi
   Future<void> _loadRecipes() async {
-    try {
-      // Mengambil seluruh resep (baik publik maupun privat) dari database
-      final recipes = await recipeService.getPublicRecipes(); 
-      if (mounted) {
-        setState(() {
-          recipeList = recipes;
-        });
-      }
-    } catch (e) {
-      print('Error loading recipes: $e');
+    await _loadRecipesData();
+  }
+
+  void _showRecipeDetail(Recipe recipe) async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecipeDetailPage(
+          recipe: recipe,
+          userName: userProfile?.username ?? 'User',
+          onRecipeUpdated: (updatedRecipe) {
+            _loadRecipesData(); // Auto reload dari DB jika ada update/comment baru di page detail
+          },
+        ),
+      ),
+    );
+
+    if (result == "deleted" || result != null) {
+      _loadAllData();
     }
   }
-  // void _showRecipeDetail(Recipe recipe) {
-  //   Navigator.push(
-  //     context,
-  //     MaterialPageRoute(
-  //       builder: (_) => RecipeDetailPage(
-  //         recipe: recipe,
-  //         userName: userProfile?.username ?? 'User',
-  //         onRecipeUpdated: (updatedRecipe) {
-  //           setState(() {
-  //             int idx = recipeList.indexWhere((r) => r.id == updatedRecipe.id);
-  //             if (idx != -1) {
-  //               recipeList[idx] = updatedRecipe;
-  //             }
-  //           });
-  //         },
-  //       ),
-  //     ),
-  //   );
-  // }
-  void _showRecipeDetail(Recipe recipe) async {
-  final result = await Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => RecipeDetailPage(
-        recipe: recipe,
-        userName: userProfile?.username ?? 'User',
-        onRecipeUpdated: (updatedRecipe) {
-          setState(() {
-            int idx = recipeList.indexWhere((r) => r.id == updatedRecipe.id);
-            if (idx != -1) {
-              recipeList[idx] = updatedRecipe;
-            }
-          });
-        },
-      ),
-    ),
-  );
 
-  // Jika result adalah "deleted", hapus dari list
-  if (result == "deleted") {
-    setState(() {
-      recipeList.removeWhere((r) => r.id == recipe.id);
-      favoriteRecipesList.removeWhere((r) => r.id == recipe.id);
-    });
-  }
-}
-
-  // @override
-  // Widget build(BuildContext context) {
-  //   Widget bodyContent;
-  //   if (isLoading) {
-  //     bodyContent = const Center(child: CircularProgressIndicator());
-  //   } else if (_selectedIndex == 3) {
-  //     bodyContent = buildProfilePage();
-  //   } else if (_selectedIndex == 2) {
-  //     bodyContent = buildFavoritePage();
-  //   } else if (_selectedIndex == 1) {
-  //     bodyContent = buildNotificationPage();
-  //   } else {
-  //     bodyContent = buildHomePage();
-  //   }
-
-  //   return Scaffold(
-  //     backgroundColor: const Color(0xFFD9ACA3),
-  //     body: SafeArea(child: bodyContent),
-  //     bottomNavigationBar: buildBottomNavbar(),
-  //   );
-  // }
-@override
+  @override
   Widget build(BuildContext context) {
-    
     Widget currentBody;
     if (_selectedIndex == 0) {
       currentBody = buildHomePage();
@@ -238,7 +231,6 @@ class _DashboardState extends State<Dashboard> {
           ? const Center(child: CircularProgressIndicator(color: Colors.pink))
           : currentBody, 
       
-      // === KEMBALIKAN TOMBOL TAMBAH RESEP MENGGUNAKAN FLOATING ACTION BUTTON ===
       floatingActionButton: isLoading 
           ? null 
           : FloatingActionButton(
@@ -251,28 +243,21 @@ class _DashboardState extends State<Dashboard> {
                   context,
                   MaterialPageRoute(builder: (_) => const TambahResep()),
                 );
-                if (result != null && result is Recipe) {
-                  result.userId = userId;
-                  result.owner = userProfile?.username ?? 'User';
-                  setState(() {
-                    recipeList.add(result);
-                  });
+                if (result != null) {
+                  _loadAllData();
                 }
               },
             ),
-      // Posisi FAB diatur agar melayang pas di bagian tengah bawah, sedikit menjorok ke dalam navbar
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
 
       bottomNavigationBar: BottomNavigationBar(
-        // Sinkronisasi index visual navbar bawah
         currentIndex: _selectedIndex >= 4 ? 3 : (_selectedIndex == 3 ? 0 : _selectedIndex), 
-        
         onTap: (index) {
           setState(() {
             if (index == 0) _selectedIndex = 0;
             if (index == 1) _selectedIndex = 1;
             if (index == 2) _selectedIndex = 2;
-            if (index == 3) _selectedIndex = 4; // Menuju halaman profil asli (index 4)
+            if (index == 3) _selectedIndex = 4; 
           });
           
           if (index == 0) _loadRecipes();
@@ -286,8 +271,6 @@ class _DashboardState extends State<Dashboard> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Beranda'),
           BottomNavigationBarItem(icon: Icon(Icons.local_fire_department), label: 'Trending'),
-          // Memberi space kosong (atau item dummy) di item navbar sebenarnya tidak perlu jika kita pakai layout standar,
-          // tapi agar susunannya seimbang dengan tombol di tengah, kita pertahankan 4 item:
           BottomNavigationBarItem(icon: Icon(Icons.bookmark), label: 'Tersimpan'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'), 
         ],
@@ -356,33 +339,31 @@ class _DashboardState extends State<Dashboard> {
     final int commentCount = (item['comment_count'] as num? ?? 0).toInt();
     final String category = item['category'] ?? 'Umum';
 
-    // Warna rank badge: emas, perak, perunggu, sisanya pink
     final List<Color> rankColors = [
-      const Color(0xFFFFC107), // #1 gold
-      const Color(0xFF9E9E9E), // #2 silver
-      const Color(0xFFCD7F32), // #3 bronze
+      const Color(0xFFFFC107), 
+      const Color(0xFF9E9E9E), 
+      const Color(0xFFCD7F32), 
     ];
     final Color rankColor =
         rank <= 3 ? rankColors[rank - 1] : const Color(0xFFD88A94);
 
     return Container(
-      width: 175,
-      margin: const EdgeInsets.only(right: 12),
+      width: 165,
+      margin: const EdgeInsets.only(right: 12, bottom: 4),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.07),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: const Color(0xFFD9ACA3).withOpacity(0.12),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Gambar + rank badge
           Stack(
             children: [
               ClipRRect(
@@ -394,57 +375,55 @@ class _DashboardState extends State<Dashboard> {
                     ? Image.network(
                         imageUrl,
                         width: double.infinity,
-                        height: 105,
+                        height: 85,
                         fit: BoxFit.cover,
                         errorBuilder: (c, e, s) => Container(
                           width: double.infinity,
-                          height: 105,
-                          color: Colors.grey[200],
-                          child: const Icon(Icons.broken_image, color: Colors.grey),
+                          height: 85,
+                          color: const Color(0xFFF0E0DD),
+                          child: const Icon(Icons.broken_image, color: Colors.grey, size: 20),
                         ),
                       )
                     : Container(
                         width: double.infinity,
-                        height: 105,
-                        color: Colors.grey[200],
-                        child: const Icon(Icons.fastfood, color: Colors.grey),
+                        height: 85,
+                        color: const Color(0xFFF0E0DD),
+                        child: const Icon(Icons.fastfood, color: Color(0xFFD9ACA3), size: 20),
                       ),
               ),
-              // Rank badge
               Positioned(
                 left: 8,
                 top: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                   decoration: BoxDecoration(
                     color: rankColor,
-                    borderRadius: BorderRadius.circular(10),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
                     '#$rank',
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 12,
+                      fontSize: 10,
                     ),
                   ),
                 ),
               ),
-              // Kategori badge
               Positioned(
                 right: 8,
                 top: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFF4081).withOpacity(0.88),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
                     category,
                     style: const TextStyle(
                       color: Colors.white,
-                      fontSize: 10,
+                      fontSize: 9,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -452,9 +431,8 @@ class _DashboardState extends State<Dashboard> {
               ),
             ],
           ),
-          // Info bawah
           Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 8),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -462,27 +440,27 @@ class _DashboardState extends State<Dashboard> {
                   title,
                   style: const TextStyle(
                     fontWeight: FontWeight.bold,
-                    fontSize: 13,
+                    fontSize: 12,
                     color: Color(0xFF4F3A38),
                   ),
-                  maxLines: 2,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 6),
                 Row(
                   children: [
                     const Icon(Icons.star_rounded, size: 14, color: Colors.amber),
-                    const SizedBox(width: 3),
+                    const SizedBox(width: 2),
                     Text(
                       rating.toStringAsFixed(1),
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF4F3A38)),
                     ),
-                    const SizedBox(width: 10),
-                    const Icon(Icons.chat_bubble_outline, size: 13, color: Colors.blueGrey),
+                    const SizedBox(width: 12),
+                    const Icon(Icons.chat_bubble_outline_rounded, size: 12, color: Color(0xFF8E6F6A)),
                     const SizedBox(width: 3),
                     Text(
                       '$commentCount',
-                      style: const TextStyle(fontSize: 12),
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF8E6F6A)),
                     ),
                   ],
                 ),
@@ -602,7 +580,7 @@ class _DashboardState extends State<Dashboard> {
             ],
           ),
         ),
-        const SizedBox(height: 15),
+        const SizedBox(height: 16),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Row(
@@ -610,29 +588,46 @@ class _DashboardState extends State<Dashboard> {
             children: [
               Row(
                 children: const [
-                  Icon(Icons.local_fire_department, color: Colors.orange),
-                  SizedBox(width: 8),
+                  Icon(Icons.local_fire_department_rounded, color: Colors.orange, size: 22),
+                  SizedBox(width: 6),
                   Text(
                     'Lagi Trending',
-                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFF4F3A38)),
                   ),
                 ],
               ),
-              TextButton(
-                onPressed: () {
+              InkWell(
+                onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const TrendingPage()),
                   );
                 },
-                child: const Text('Lihat Semua'),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                  child: Row(
+                    children: const [
+                      Text(
+                        'Lihat Semua',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold, 
+                          fontSize: 13, 
+                          color: Color(0xFFFF4081)
+                        ),
+                      ),
+                      SizedBox(width: 2),
+                      Icon(Icons.chevron_right_rounded, size: 18, color: Color(0xFFFF4081)),
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
         ),
         const SizedBox(height: 10),
         SizedBox(
-          height: 200,
+          height: 150,
           child: realtimeTrendingList.isEmpty
               ? const Center(
                   child: Text(
@@ -642,6 +637,7 @@ class _DashboardState extends State<Dashboard> {
                 )
               : ListView.builder(
                   scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   itemCount: realtimeTrendingList.length > 5
                       ? 5
@@ -651,7 +647,7 @@ class _DashboardState extends State<Dashboard> {
                   },
                 ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 14),
         Expanded(
           child: filteredRecipes.isEmpty
               ? const Center(
@@ -663,65 +659,30 @@ class _DashboardState extends State<Dashboard> {
     );
   }
 
-  Widget buildBottomNavbar() {
-    return Container(
-      height: 80,
-      decoration: const BoxDecoration(
-        color: Color(0xFFFCEEE4),
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(35),
-          topRight: Radius.circular(35),
-        ),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          IconButton(
-            icon: Icon(
-              _selectedIndex == 2 ? Icons.favorite : Icons.favorite_border,
-              size: 30,
-              color: _selectedIndex == 2 ? Colors.pink : const Color(0xFF4F3A38),
-            ),
-            onPressed: () => setState(() => _selectedIndex = 2),
-          ),
-          IconButton(
-            icon: const Icon(Icons.add_circle, size: 50, color: Color(0xFFFF4081)),
-            onPressed: () async {
-              final result = await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const TambahResep()),
-              );
-              if (result != null && result is Recipe) {
-                result.userId = userId;
-                result.owner = userProfile?.username ?? 'User';
-                setState(() {
-                  recipeList.add(result);
-                });
-              }
-            },
-          ),
-          IconButton(
-            icon: Icon(
-              Icons.home_outlined,
-              size: 30,
-              color: _selectedIndex == 0 ? Colors.pink : const Color(0xFF4F3A38),
-            ),
-            onPressed: _backToHome,
-          ),
-        ],
-      ),
-    );
-  }
-
+  // HUBUNGAN REALTIME: Data stars, komen, & love terintergrasi penuh sesuai Supabase
   Widget resepCard(Recipe recipe, int index) {
     bool isFavorited = favoriteRecipesList.any((r) => r.id == recipe.id);
+    final bool isOwner = recipe.userId == userId;
+    
+    // Logic pembacaan data dinamis sesuai database
+    final double avgRating = recipe.ratings != null && recipe.ratings.isNotEmpty 
+        ? recipe.ratings.map((r) => r.stars).reduce((a, b) => a + b) / recipe.ratings.length 
+        : 0.0;
+    final int commentCount = recipe.comments?.length ?? 0;
 
     return GestureDetector(
       onTap: () => _showRecipeDetail(recipe),
       child: Container(
         decoration: BoxDecoration(
-          color: const Color(0xFFFCEEE4),
+          color: Colors.white,
           borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFD9ACA3).withOpacity(0.25),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -738,73 +699,168 @@ class _DashboardState extends State<Dashboard> {
                               fit: BoxFit.cover,
                             )
                           : null,
-                      color: Colors.grey[300],
+                      color: const Color(0xFFF0E0DD),
+                    ),
+                    child: recipe.imageUrl == null
+                        ? const Center(
+                            child: Icon(Icons.fastfood_rounded, size: 40, color: Color(0xFFD9ACA3)),
+                          )
+                        : null,
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      height: 50,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [
+                            Colors.black.withOpacity(0.45),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                  if (recipe.isPublic && recipe.category.isNotEmpty)
+                  if (recipe.category.isNotEmpty)
                     Positioned(
-                      top: 10,
-                      right: 10,
+                      top: 8,
+                      right: 8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFF4081),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
                           recipe.category,
                           style: const TextStyle(
-                            fontSize: 11,
+                            fontSize: 10,
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
                     ),
-                  if (recipe.ratings.isNotEmpty)
+                  if (isOwner)
                     Positioned(
-                      bottom: 10,
-                      left: 10,
+                      top: 8,
+                      left: 8,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                         decoration: BoxDecoration(
-                          color: Colors.amber.withValues(alpha: 0.9),
-                          borderRadius: BorderRadius.circular(12),
+                          color: recipe.isPrivate
+                              ? const Color(0xFF6D4C41).withOpacity(0.85)
+                              : const Color(0xFF43A047).withOpacity(0.85),
+                          borderRadius: BorderRadius.circular(10),
                         ),
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Text('⭐', style: TextStyle(fontSize: 12)),
+                            Icon(
+                              recipe.isPrivate ? Icons.lock_rounded : Icons.public_rounded,
+                              size: 10,
+                              color: Colors.white,
+                            ),
                             const SizedBox(width: 3),
                             Text(
-                              recipe.averageRating.toStringAsFixed(1),
+                              recipe.isPrivate ? 'Privat' : 'Publik',
                               style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                                fontSize: 10,
                                 color: Colors.white,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ],
                         ),
                       ),
                     ),
+                  // Badge Rating Atas Realtime
+                  Positioned(
+                    bottom: 7,
+                    left: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: avgRating >= 1
+                            ? Colors.amber.withOpacity(0.92)
+                            : Colors.black.withOpacity(0.35),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.star_rounded, size: 12, color: Colors.white),
+                          const SizedBox(width: 3),
+                          Text(
+                            avgRating >= 1
+                                ? avgRating.toStringAsFixed(1)
+                                : 'Baru',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  // Badge Komen Atas Realtime
+                  Positioned(
+                    bottom: 7,
+                    right: 8,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.35),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.chat_bubble_rounded, size: 11, color: Colors.white),
+                          const SizedBox(width: 3),
+                          Text(
+                            '$commentCount',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
                         child: Text(
                           recipe.name,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Color(0xFF3E2723),
+                          ),
+                          maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
+                      const SizedBox(width: 4),
+                      // Love / Favorit Toggle dengan update database
                       GestureDetector(
                         onTap: () async {
                           try {
@@ -812,47 +868,78 @@ class _DashboardState extends State<Dashboard> {
                               userId: userId!,
                               recipeId: recipe.id,
                             );
-                            setState(() {
-                              if (isFavorited) {
-                                favoriteRecipesList.removeWhere((r) => r.id == recipe.id);
-                              } else {
-                                favoriteRecipesList.add(recipe);
+                            // Auto Sinkron state lokal setelah toggle favorit
+                            _loadFavoritesData();
+                            if (!isFavorited) {
+                              setState(() {
                                 notificationList.add("Resep ${recipe.name} ditambahkan ke favorit!");
-                              }
-                            });
+                              });
+                            }
                           } catch (e) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Error: $e')),
+                              SnackBar(content: Text('Error Favorite: $e')),
                             );
                           }
                         },
                         child: Icon(
-                          isFavorited ? Icons.favorite : Icons.favorite_border,
-                          color: Colors.pink,
-                          size: 20,
+                          isFavorited ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                          color: isFavorited ? Colors.pink : const Color(0xFFBCAAA4),
+                          size: 18,
                         ),
-                      )
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Row Bintang Indikator Bawah Realtime
+                  Row(
+                    children: [
+                      ...List.generate(5, (i) {
+                        return Icon(
+                          i < avgRating.round()
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
+                          size: 13,
+                          color: avgRating >= 1 ? Colors.amber : const Color(0xFFBCAAA4),
+                        );
+                      }),
+                      const SizedBox(width: 5),
+                      Text(
+                        avgRating >= 1 ? avgRating.toStringAsFixed(1) : '-',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF8D6E63),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const Spacer(),
+                      const Icon(Icons.chat_bubble_outline_rounded, size: 12, color: Color(0xFF8D6E63)),
+                      const SizedBox(width: 3),
+                      Text(
+                        '$commentCount',
+                        style: const TextStyle(fontSize: 10, color: Color(0xFF8D6E63)),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
                   SizedBox(
                     width: double.infinity,
-                    height: 32,
+                    height: 30,
                     child: ElevatedButton.icon(
                       onPressed: () => _showRecipeDetail(recipe),
-                      icon: const Icon(Icons.visibility, size: 16),
-                      label: const Text('Lihat Detail', style: TextStyle(fontSize: 12)),
+                      icon: const Icon(Icons.visibility_rounded, size: 14),
+                      label: const Text('Lihat Detail', style: TextStyle(fontSize: 11)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFFFF4081),
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 0),
+                        elevation: 0,
+                        padding: EdgeInsets.zero,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                       ),
                     ),
                   ),
                 ],
               ),
-            )
+            ),
           ],
         ),
       ),
@@ -886,111 +973,211 @@ class _DashboardState extends State<Dashboard> {
 
   Widget buildProfilePage() {
     return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
-            child: Row(
-              children: [
-                IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: _backToHome),
-                const Text("Profil Saya", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              ],
+          const Padding(
+            padding: EdgeInsets.only(bottom: 25),
+            child: Text(
+              "Profil Saya",
+              style: TextStyle(
+                fontSize: 24, 
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF4F3A38),
+                letterSpacing: 0.5,
+              ),
             ),
           ),
-          CircleAvatar(
-            radius: 70,
-            backgroundColor: const Color(0xFFFCEEE4),
-            backgroundImage: userProfile?.avatarUrl != null
-                ? NetworkImage(userProfile!.avatarUrl!)
-                : null,
-            child: userProfile?.avatarUrl == null
-                ? const Icon(Icons.person, size: 80, color: Color(0xFFD9ACA3))
-                : null,
-          ),
-          const SizedBox(height: 15),
-          Text(
-            userProfile?.username ?? 'User',
-            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 30),
-          buildEditField(
-            "Edit Nama :",
-            "Masukkan nama baru...",
-            _nameEditController,
-            Icons.edit_note,
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: 200,
-            child: OutlinedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => PrivateRecipesPage(
-                      recipes: recipeList,
-                      username: userProfile?.username ?? 'User',
-                      onRecipeUpdated: (updatedRecipe) {
-                      // Ketika resep diperbarui di halaman detail, load ulang resep di dashboard
-                    _loadRecipes(); 
-                  },
-                  onRecipeDeleted: (deletedId) {
-                    // Ketika resep dihapus, load ulang resep di dashboard
-                    _loadRecipes();
-                  },
-                    ),
+          Center(
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFFD9ACA3).withOpacity(0.3),
+                    blurRadius: 15,
+                    offset: const Offset(0, 6),
                   ),
-                );
-              },
-              icon: const Icon(Icons.lock_outline),
-              label: const Text('Resep Privat'),
+                ],
+                border: Border.all(color: Colors.white, width: 4),
+              ),
+              child: CircleAvatar(
+                radius: 60,
+                backgroundColor: const Color(0xFFFCEEE4),
+                backgroundImage: userProfile?.avatarUrl != null
+                    ? NetworkImage(userProfile!.avatarUrl!)
+                    : null,
+                child: userProfile?.avatarUrl == null
+                    ? const Icon(Icons.person, size: 65, color: Color(0xFFD9ACA3))
+                    : null,
+              ),
             ),
           ),
-          const SizedBox(height: 20),
-          ElevatedButton(
-            onPressed: () async {
-              try {
-                if (_nameEditController.text.isNotEmpty) {
-                  await userService.updateUserProfile(
-                    userId: userId!,
-                    username: _nameEditController.text,
-                  );
-                  setState(() {
-                    if (userProfile != null) {
-                      userProfile = userProfile!.copyWith(
-                        username: _nameEditController.text,
-                      );
-                    }
-                  });
-                }
-                _nameEditController.clear();
-                if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Profil disimpan!")),
-                );
-              } catch (e) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Error: $e')),
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4F3A38),
-              minimumSize: const Size(200, 45),
+          const SizedBox(height: 14),
+          Text(
+            userProfile?.username ?? 'User Pemanggang',
+            style: const TextStyle(
+              fontSize: 20, 
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF4F3A38),
             ),
-            child: const Text("Simpan Perubahan", style: TextStyle(color: Colors.white)),
           ),
-          const SizedBox(height: 15),
-          OutlinedButton.icon(
-            onPressed: _logout,
-            icon: const Icon(Icons.logout, color: Colors.red),
-            label: const Text("Keluar Akun", style: TextStyle(color: Colors.red)),
-            style: OutlinedButton.styleFrom(
-              side: const BorderSide(color: Colors.red),
-              minimumSize: const Size(200, 45),
+          const SizedBox(height: 4),
+          Text(
+            authService.getCurrentUserEmail() ?? 'Email tidak tersedia',
+            style: const TextStyle(
+              fontSize: 13, 
+              color: Color(0xFF8E6F6A),
+              fontWeight: FontWeight.w400,
             ),
           ),
           const SizedBox(height: 30),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Padding(
+              padding: const EdgeInsets.only(left: 4, bottom: 8),
+              child: const Text(
+                "Nama Pengguna", 
+                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF4F3A38), fontSize: 14),
+              ),
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFEFE5E3)),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFD9ACA3).withOpacity(0.15),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                )
+              ]
+            ),
+            child: TextField(
+              controller: _nameEditController,
+              style: const TextStyle(color: Color(0xFF4F3A38), fontWeight: FontWeight.w500),
+              decoration: const InputDecoration(
+                hintText: "Masukkan nama baru...",
+                hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                border: InputBorder.none,
+                icon: Icon(Icons.badge_outlined, color: Color(0xFF8E6F6A), size: 22),
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.lock_person_outlined, size: 18),
+                    label: const Text('Resep Privat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFF4F3A38),
+                      side: const BorderSide(color: Color(0xFF4F3A38), width: 1.5),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: () async {
+                      if (userId == null) return;
+
+                      try {
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (context) => const Center(
+                            child: CircularProgressIndicator(
+                              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFF4081)),
+                            ),
+                          ),
+                        );
+
+                        final updatedList = await recipeService.getUserRecipes(userId!);
+
+                        if (!mounted) return;
+                        Navigator.pop(context);
+
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => PrivateRecipesPage(
+                              recipes: updatedList,
+                              username: userProfile?.username ?? 'User',
+                              onRecipeUpdated: (updatedRecipe) {
+                                _loadRecipesData();
+                              },
+                              onRecipeDeleted: (deletedId) {
+                                _loadAllData();
+                              },
+                            ),
+                          ),
+                        );
+                      } catch (e) {
+                        if (mounted) Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Gagal mengambil resep privat: $e')),
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.save_rounded, size: 18),
+                    label: const Text("Simpan", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFF4081),
+                      foregroundColor: Colors.white,
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: () async {
+                      try {
+                        if (_nameEditController.text.isNotEmpty) {
+                          await userService.updateUserProfile(
+                            userId: userId!,
+                            username: _nameEditController.text,
+                          );
+                          _loadUserProfile();
+                        }
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Profil berhasil disimpan!")),
+                        );
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Error: $e')),
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 60),
+          TextButton.icon(
+            onPressed: _logout,
+            icon: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 20),
+            label: const Text(
+              "Keluar Akun", 
+              style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+          ),
+          const SizedBox(height: 20),
         ],
       ),
     );
@@ -1002,45 +1189,13 @@ class _DashboardState extends State<Dashboard> {
       itemCount: list.length,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
-        childAspectRatio: 0.8,
-        crossAxisSpacing: 15,
-        mainAxisSpacing: 15,
+        childAspectRatio: 0.72,
+        crossAxisSpacing: 12,
+        mainAxisSpacing: 12,
       ),
       itemBuilder: (context, index) {
         return resepCard(list[index], index);
       },
-    );
-  }
-
-  Widget buildEditField(
-    String label,
-    String hint,
-    TextEditingController controller,
-    IconData icon,
-  ) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: const Color(0xFFFCEEE4),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, size: 20, color: const Color(0xFF4F3A38)),
-              const SizedBox(width: 10),
-              Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-            ],
-          ),
-          TextField(
-            controller: controller,
-            decoration: InputDecoration(hintText: hint, border: InputBorder.none),
-          ),
-        ],
-      ),
     );
   }
 

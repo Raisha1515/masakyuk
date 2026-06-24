@@ -57,27 +57,86 @@ class _TambahResepState extends State<TambahResep> {
   }
 
   Future<void> _pickImage() async {
-    try {
-      if (!kIsWeb) {
-        final status = await Permission.photos.request();
-        if (!status.isGranted) {
-          _showErrorSnackBar('Izin akses galeri ditolak');
-          return;
+    PermissionStatus status;
+
+    if (Platform.isAndroid) {
+      // 1. Cek dulu status Permission.photos (Android 13+)
+      status = await Permission.photos.status;
+      
+      if (status.isDenied) {
+        status = await Permission.photos.request();
+      }
+
+      // 2. FALLBACK: Jika status masih ditolak/tidak aktif, coba minta Permission.storage (Android 12 kebawah)
+      if (status.isDenied) {
+        status = await Permission.storage.status;
+        if (status.isDenied) {
+          status = await Permission.storage.request();
         }
       }
-      setState(() => _isPickingImage = true);
-      final XFile? pickedFile = await _picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
-      );
-      if (pickedFile != null) {
-        setState(() => _pickedImage = pickedFile);
+    } else {
+      // Untuk iOS
+      status = await Permission.photos.status;
+      if (status.isDenied) {
+        status = await Permission.photos.request();
       }
-    } catch (e) {
-      _showErrorSnackBar('Gagal memilih gambar: $e');
-    } finally {
-      setState(() => _isPickingImage = false);
     }
+
+    // Jika salah satu izin diberikan oleh sistem
+    if (status.isGranted || status.isLimited) {
+      try {
+        final XFile? pickedFile = await _picker.pickImage(
+          source: ImageSource.gallery,
+          imageQuality: 80,
+        );
+
+        if (pickedFile != null) {
+          setState(() {
+            _pickedImage = pickedFile; 
+          });
+        }
+      } catch (e) {
+        _showSnackBar("Gagal mengambil gambar: $e");
+      }
+    } 
+    else if (status.isPermanentlyDenied) {
+      _showSetupPermissionDialog();
+    } 
+    else {
+      _showSnackBar("Izin akses galeri ditolak.");
+    }
+  }
+
+  void _showSnackBar(String pesan) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(pesan), backgroundColor: Colors.redAccent),
+    );
+  }
+
+  void _showSetupPermissionDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) => AlertDialog(
+        title: const Text("Izin Galeri Diperlukan"),
+        content: const Text(
+          "Aplikasi memerlukan izin galeri untuk mengunggah foto makanan. "
+          "Silakan aktifkan izin di pengaturan aplikasi Anda.",
+        ),
+        actions: [
+          TextButton(
+            child: const Text("Batal", style: TextStyle(color: Colors.grey)),
+            onPressed: () => Navigator.pop(context),
+          ),
+          TextButton(
+            child: const Text("Buka Pengaturan", style: TextStyle(color: Colors.pink)),
+            onPressed: () {
+              Navigator.pop(context);
+              openAppSettings();
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   void _showErrorSnackBar(String message) {
@@ -392,6 +451,7 @@ class _TambahResepState extends State<TambahResep> {
           category: _selectedCategory!,
           imageUrl: imageUrl,
           isPublic: _isPublic,
+          isPrivate: !_isPublic,
         );
         final updatedRecipe = Recipe(
         id: widget.recipe!.id, // tetap pakai ID lama
@@ -402,6 +462,8 @@ class _TambahResepState extends State<TambahResep> {
         steps: _stepsController.text,
         imageUrl: imageUrl ?? widget.recipe!.imageUrl, // atau variabel penampung gambar Anda
         owner: widget.recipe!.owner,
+        isPublic: _isPublic,
+        isPrivate: !_isPublic,
       );
 
       // 2. Kembalikan objek updatedRecipe ini ke halaman detail
@@ -419,6 +481,7 @@ class _TambahResepState extends State<TambahResep> {
           category: _selectedCategory!,
           imageUrl: imageUrl,
           isPublic: _isPublic,
+          isPrivate: !_isPublic
         );
 
         final newRecipe = Recipe(
@@ -429,6 +492,7 @@ class _TambahResepState extends State<TambahResep> {
           steps: _stepsController.text,
           category: _selectedCategory!,
           isPublic: _isPublic,
+          isPrivate: !_isPublic,
         );
 
         if (!mounted) return;

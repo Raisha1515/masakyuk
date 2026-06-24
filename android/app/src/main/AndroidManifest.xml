@@ -1,4 +1,9 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.masakyuk">
+        <!-- Permissions for gallery access and image picking -->
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    
     <application
         android:label="masakyuk"
         android:name="${applicationName}"
@@ -42,7 +47,4 @@
             <data android:mimeType="text/plain"/>
         </intent>
     </queries>
-    <!-- Permissions for gallery access and image picking -->
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
 </manifest>

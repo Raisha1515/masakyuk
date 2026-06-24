@@ -49,5 +49,7 @@
 	<string>Kami membutuhkan akses ke galeri Anda untuk memilih foto makanan untuk resep Anda.</string>
 	<key>NSPhotoLibraryAddOnlyUsageDescription</key>
 	<string>Kami membutuhkan akses untuk menyimpan foto resep ke galeri Anda.</string>
+	<key>NSCameraUsageDescription</key>
+<string>Aplikasi ini membutuhkan akses kamera untuk mengambil foto resep.</string>
 </dict>
 </plist>
